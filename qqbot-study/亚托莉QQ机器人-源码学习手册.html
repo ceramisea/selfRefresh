@@ -1,0 +1,1395 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>亚托莉 QQ 陪伴机器人 · 源码学习手册</title>
+<style>
+  /* ============ 设计系统 ============
+     主题：高性能仿生人 · 数据链路
+     色板：
+       --bg0        #0a0c12  底色（深海/机舱）
+       --bg1        #10141f  面板
+       --bg2        #161b2a  卡片
+       --bg3        #1d2334  hover
+       --ink        #e8ecf6  正文
+       --ink-dim    #9aa4bf  次级文字
+       --line       #232c42  描边
+       --atri-red   #e04b5a  亚托莉瞳色红
+       --amber      #e8b04b  暖金（呆毛/灯丝）
+       --teal       #5cc8c0  机械青（状态/成功）
+       --code       #0d1117  代码块底
+   ============ */
+  :root{
+    --bg0:#0a0c12; --bg1:#10141f; --bg2:#161b2a; --bg3:#1d2334;
+    --ink:#e8ecf6; --ink-dim:#9aa4bf; --ink-faint:#6b7590;
+    --line:#232c42; --line-soft:#1a2133;
+    --atri-red:#e04b5a; --atri-red-dim:#8e3540;
+    --amber:#e8b04b; --teal:#5cc8c0; --violet:#8b7bd8;
+    --code:#0d1117;
+    --radius:10px;
+    --mono:"JetBrains Mono","SFMono-Regular","Cascadia Code",Consolas,monospace;
+    --sans:"Inter","Segoe UI","Microsoft YaHei UI","PingFang SC","Source Han Sans SC",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    font-family:var(--sans); background:var(--bg0); color:var(--ink);
+    line-height:1.75; font-size:15.5px; -webkit-font-smoothing:antialiased;
+  }
+  ::selection{background:rgba(224,75,90,.32); color:#fff}
+  a{color:var(--teal); text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  /* ---------- 布局 ---------- */
+  .layout{display:flex; min-height:100vh}
+  .sidebar{
+    width:278px; flex:0 0 278px; position:sticky; top:0; height:100vh;
+    background:var(--bg1); border-right:1px solid var(--line);
+    overflow-y:auto; padding:20px 14px 40px; z-index:20;
+  }
+  .content{flex:1; min-width:0; padding:0 8px 80px 8px}
+  .content-inner{max-width:920px; margin:0 auto; padding:0 28px}
+
+  /* ---------- 侧边栏 ---------- */
+  .brand{display:flex; align-items:center; gap:10px; padding:6px 8px 18px}
+  .brand .logo{
+    width:34px; height:34px; border-radius:9px; flex:0 0 34px;
+    background:linear-gradient(135deg,var(--atri-red),#7a2a33);
+    display:flex; align-items:center; justify-content:center;
+    font-size:17px; font-weight:800; color:#fff; box-shadow:0 0 18px rgba(224,75,90,.45);
+  }
+  .brand .t1{font-size:14px; font-weight:700; letter-spacing:.3px}
+  .brand .t2{font-size:11px; color:var(--ink-faint); font-family:var(--mono)}
+  .nav-sec{margin-top:16px}
+  .nav-sec .sec-label{
+    font-size:10.5px; letter-spacing:1.5px; text-transform:uppercase;
+    color:var(--ink-faint); padding:6px 8px 4px; font-family:var(--mono);
+  }
+  .nav-sec a{
+    display:block; padding:5px 8px; border-radius:6px; color:var(--ink-dim);
+    font-size:13px; line-height:1.5; transition:background .12s,color .12s;
+  }
+  .nav-sec a:hover{background:var(--bg3); color:var(--ink); text-decoration:none}
+  .nav-sec a.active{background:rgba(224,75,90,.14); color:var(--atri-red)}
+  .nav-sec a .tag{float:right; font-family:var(--mono); font-size:10px; color:var(--ink-faint); margin-top:3px}
+  .sidebar-foot{margin-top:24px; padding:12px 8px; border-top:1px solid var(--line); font-size:11px; color:var(--ink-faint); font-family:var(--mono)}
+
+  /* ---------- Hero ---------- */
+  .hero{
+    position:relative; overflow:hidden;
+    padding:56px 8px 44px; border-bottom:1px solid var(--line);
+    background:
+      radial-gradient(900px 300px at 20% -10%, rgba(224,75,90,.16), transparent 60%),
+      radial-gradient(700px 280px at 90% 10%, rgba(92,200,192,.10), transparent 60%),
+      linear-gradient(180deg,var(--bg1),var(--bg0));
+  }
+  .hero .kicker{
+    font-family:var(--mono); font-size:12px; letter-spacing:3px; color:var(--atri-red);
+    margin-bottom:14px; text-transform:uppercase;
+  }
+  .hero h1{font-size:38px; font-weight:800; letter-spacing:-.5px; line-height:1.25}
+  .hero h1 .dim{color:var(--ink-faint); font-weight:500}
+  .hero .sub{color:var(--ink-dim); font-size:16px; margin-top:14px; max-width:640px}
+  .hero .spec{
+    margin-top:26px; display:flex; flex-wrap:wrap; gap:10px; font-family:var(--mono); font-size:12px;
+  }
+  .spec-chip{
+    padding:5px 12px; border:1px solid var(--line); border-radius:999px;
+    background:var(--bg2); color:var(--ink-dim);
+  }
+  .spec-chip b{color:var(--amber); font-weight:600}
+
+  /* ---------- 章节 ---------- */
+  section{margin-top:64px; scroll-margin-top:20px}
+  .sec-head{display:flex; align-items:center; gap:12px; margin-bottom:8px}
+  .sec-head .num{
+    font-family:var(--mono); font-size:12px; color:var(--atri-red);
+    border:1px solid var(--atri-red-dim); border-radius:6px; padding:2px 8px;
+    background:rgba(224,75,90,.08);
+  }
+  .sec-head h2{font-size:24px; font-weight:750; letter-spacing:-.2px}
+  .sec-intro{color:var(--ink-dim); font-size:14.5px; max-width:760px; margin:6px 0 22px}
+  h3{font-size:17.5px; font-weight:650; margin:34px 0 10px; padding-left:12px; border-left:3px solid var(--atri-red)}
+  h4{font-size:15px; font-weight:600; margin:22px 0 8px; color:var(--amber)}
+
+  p{margin:10px 0; color:var(--ink-dim)}
+  p b, li b{color:var(--ink)}
+  ul,ol{margin:8px 0 8px 22px; color:var(--ink-dim)}
+  li{margin:5px 0}
+
+  /* ---------- 卡片 / 网格 ---------- */
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+  .grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:12px}
+  @media(max-width:820px){.grid2,.grid3{grid-template-columns:1fr}}
+  .card{
+    background:var(--bg2); border:1px solid var(--line); border-radius:var(--radius);
+    padding:16px 18px; transition:border-color .15s, transform .15s;
+  }
+  .card:hover{border-color:var(--atri-red-dim); transform:translateY(-1px)}
+  .card .cd-title{font-size:13.5px; font-weight:650; color:var(--ink); display:flex; align-items:center; gap:8px}
+  .card .cd-title .mono{font-family:var(--mono); font-size:12px; color:var(--atri-red)}
+  .card p{font-size:13px; margin:8px 0 0; color:var(--ink-dim)}
+  .card .cd-path{font-family:var(--mono); font-size:11px; color:var(--ink-faint); margin-top:10px; border-top:1px dashed var(--line); padding-top:8px}
+
+  /* ---------- 代码 ---------- */
+  pre{
+    background:var(--code); border:1px solid var(--line); border-radius:var(--radius);
+    padding:16px 18px; overflow-x:auto; margin:12px 0; font-size:13px; line-height:1.7;
+  }
+  pre code{font-family:var(--mono); color:#c9d4e8}
+  code.inline{
+    font-family:var(--mono); font-size:12.5px; background:var(--bg3);
+    border:1px solid var(--line); border-radius:5px; padding:1px 7px; color:var(--amber);
+  }
+  pre .c{color:#5b6a85}      /* 注释 */
+  pre .k{color:#8b9de8}      /* 关键字 */
+  pre .s{color:#a8d08d}      /* 字符串 */
+  pre .n{color:#e8b04b}      /* 数字 */
+  pre .p{color:#7fa0b8}      /* 路径 */
+
+  /* ---------- 表格 ---------- */
+  .tbl-wrap{overflow-x:auto; margin:14px 0}
+  table{width:100%; border-collapse:collapse; font-size:13.5px; min-width:560px}
+  th{
+    text-align:left; font-size:12px; font-family:var(--mono); letter-spacing:.5px;
+    text-transform:uppercase; color:var(--ink-faint);
+    border-bottom:1px solid var(--line); padding:9px 12px;
+  }
+  td{border-bottom:1px solid var(--line-soft); padding:9px 12px; color:var(--ink-dim); vertical-align:top}
+  td b{color:var(--ink); font-weight:600}
+  tr:hover td{background:rgba(255,255,255,.015)}
+
+  /* ---------- 提示框 ---------- */
+  .note{
+    border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px;
+    margin:14px 0; font-size:13.5px; color:var(--ink-dim); background:var(--bg2);
+  }
+  .note .nt{font-weight:700; font-size:12px; font-family:var(--mono); letter-spacing:1px; margin-bottom:4px}
+  .note.tip{border-color:rgba(92,200,192,.4); background:rgba(92,200,192,.05)}
+  .note.tip .nt{color:var(--teal)}
+  .note.warn{border-color:rgba(232,176,75,.4); background:rgba(232,176,75,.05)}
+  .note.warn .nt{color:var(--amber)}
+  .note.danger{border-color:rgba(224,75,90,.45); background:rgba(224,75,90,.06)}
+  .note.danger .nt{color:var(--atri-red)}
+
+  /* ---------- 折叠 ---------- */
+  details{border:1px solid var(--line); border-radius:var(--radius); margin:10px 0; background:var(--bg2); overflow:hidden}
+  details>summary{
+    cursor:pointer; padding:13px 16px; font-weight:600; font-size:14px; color:var(--ink);
+    list-style:none; display:flex; align-items:center; gap:10px; user-select:none;
+  }
+  details>summary::-webkit-details-marker{display:none}
+  details>summary::before{
+    content:"▸"; color:var(--atri-red); font-size:13px; transition:transform .15s; flex:0 0 auto;
+  }
+  details[open]>summary::before{transform:rotate(90deg)}
+  details>summary:hover{background:var(--bg3)}
+  details .d-body{padding:4px 18px 16px; border-top:1px solid var(--line-soft)}
+  details .d-body p, details .d-body li{font-size:13.5px}
+
+  /* ---------- 目录树 ---------- */
+  .tree{font-family:var(--mono); font-size:12.8px; line-height:1.85}
+  .tree .row{padding:2px 10px; border-radius:5px; white-space:pre}
+  .tree .row:hover{background:var(--bg3)}
+  .tree .dir{color:#d7deee; cursor:pointer}
+  .tree .dir::after{content:"/"; color:var(--ink-faint)}
+  .tree .file{color:var(--ink-dim)}
+  .tree .cmt{color:var(--ink-faint)}
+  .tree .sub{display:none}
+  .tree .open>.sub{display:block}
+  .tree .tw{cursor:pointer; user-select:none}
+  .tree .tw::before{content:"▸ "; color:var(--atri-red); font-size:11px}
+  .tree .open>.row .tw::before{content:"▾ "}
+
+  /* ---------- 消息流图 ---------- */
+  .flow{border:1px solid var(--line); border-radius:var(--radius); background:var(--bg2); padding:20px; margin:16px 0; overflow-x:auto}
+  .flow .fbox{
+    display:inline-block; font-family:var(--mono); font-size:12px; color:var(--ink);
+    background:var(--bg3); border:1px solid var(--line); border-radius:7px;
+    padding:7px 13px; margin:4px 2px; white-space:nowrap;
+  }
+  .flow .fbox.hl{border-color:var(--atri-red-dim); color:var(--atri-red)}
+  .flow .fbox.svc{border-color:rgba(92,200,192,.35); color:var(--teal)}
+  .flow .farrow{color:var(--ink-faint); font-family:var(--mono); font-size:13px; padding:0 4px}
+  .flow .fnote{color:var(--ink-faint); font-size:11.5px; font-family:var(--mono); margin-top:10px; padding-top:10px; border-top:1px dashed var(--line)}
+  .flow .fline{display:flex; flex-wrap:wrap; align-items:center; gap:2px}
+
+  /* ---------- 协议 / 端口 ---------- */
+  .port-table td:first-child{font-family:var(--mono); font-size:12.5px; color:var(--teal); white-space:nowrap}
+
+  /* ---------- 章节进度 ---------- */
+  .progress-bar{position:fixed; top:0; left:0; height:2px; background:linear-gradient(90deg,var(--atri-red),var(--amber)); z-index:99; width:0}
+
+  /* ---------- 响应式 ---------- */
+  @media(max-width:1000px){
+    .layout{display:block}
+    .sidebar{display:none}
+    .content{padding:0}
+    .content-inner{padding:0 18px}
+  }
+
+  /* ---------- 打印 / 可访问性 ---------- */
+  @media print{.sidebar,.progress-bar,.flow .farrow{display:none} .content{padding:0}}
+  :focus-visible{outline:2px solid var(--atri-red); outline-offset:2px}
+  @media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<div class="progress-bar" id="progressBar"></div>
+
+<div class="layout">
+
+<!-- ================= 侧边栏 ================= -->
+<nav class="sidebar" aria-label="目录">
+  <div class="brand">
+    <div class="logo">A</div>
+    <div>
+      <div class="t1">亚托莉源码学习手册</div>
+      <div class="t2">ATRI QQ BOT · v0.3</div>
+    </div>
+  </div>
+
+  <div class="nav-sec">
+    <div class="sec-label">概览</div>
+    <a href="#overview">01 · 项目全景</a>
+    <a href="#architecture">02 · 总体架构</a>
+    <a href="#repo">03 · 目录地图</a>
+  </div>
+  <div class="nav-sec">
+    <div class="sec-label">源码拆解</div>
+    <a href="#onebot">04 · 消息接入 OneBot</a>
+    <a href="#reply">05 · 回复引擎 Persona</a>
+    <a href="#memory">06 · 记忆与 RAG</a>
+    <a href="#tools">07 · LLM 工具系统</a>
+    <a href="#plan">08 · 消息规划与表情</a>
+    <a href="#proactive">09 · 主动互动</a>
+    <a href="#voice">10 · 语音与歌声</a>
+    <a href="#webui">11 · WebUI 管理面板</a>
+    <a href="#desktop">12 · 桌宠</a>
+  </div>
+  <div class="nav-sec">
+    <div class="sec-label">实践</div>
+    <a href="#deploy">13 · 本地部署与启动</a>
+    <a href="#develop">14 · 二次开发指南</a>
+    <a href="#trouble">15 · 排错速查</a>
+  </div>
+
+  <div class="sidebar-foot">
+    YHN-04B / 高性能仿生人<br>
+    学习笔记 · 依据源码 v0.3
+  </div>
+</nav>
+
+<!-- ================= 正文 ================= -->
+<main class="content">
+<div class="content-inner">
+
+  <!-- ============ HERO ============ -->
+  <header class="hero">
+    <div class="kicker">// atri-qq-bot · study guide</div>
+    <h1>亚托莉 <span class="dim">QQ 陪伴机器人</span></h1>
+    <p class="sub">
+      一套完整的 AI 陪伴机器人工程：基于 OneBot/NapCat 协议接入 QQ，
+      用 LLM 驱动人设回复，内置分层记忆 + RAG 语义检索、Function Calling 工具系统、
+      独立语音/歌声服务、桌面宠物与 Web 管理面板。
+    </p>
+    <div class="spec">
+      <span class="spec-chip">Python <b>&ge;3.11</b></span>
+      <span class="spec-chip">源码 <b>≈4.6 万行</b></span>
+      <span class="spec-chip">测试 <b>337 passed</b></span>
+      <span class="spec-chip">核心包 <b>5</b></span>
+      <span class="spec-chip">端口 <b>8765 / 8787 / 8790 / 6099</b></span>
+    </div>
+  </header>
+
+  <!-- ============ 01 项目全景 ============ -->
+  <section id="overview">
+    <div class="sec-head"><span class="num">01</span><h2>项目全景</h2></div>
+    <p class="sec-intro">
+      在阅读源码前，先建立三个层面的认识：这个项目<strong>是什么</strong>、
+      <strong>由哪些子系统组成</strong>、以及各子系统之间如何协作。
+    </p>
+
+    <h3>一句话定位</h3>
+    <p>
+      它不是一个「单文件调大模型的脚本」，而是一个<strong>多服务系统</strong>：
+      NapCat 负责登录 QQ 并转发消息，Python 主服务负责理解与回复，
+      独立的语音服务负责 TTS/ASR，WebUI 负责运维管理，桌宠负责把这一切包装成 Windows 桌面上的一只小宠物。
+    </p>
+
+    <h3>五个 Python 包</h3>
+    <div class="grid2">
+      <div class="card">
+        <div class="cd-title">atri_qq_bot <span class="mono">≈2.0 万行</span></div>
+        <p>主机器人。OneBot 消息接入、回复引擎、记忆系统、LLM 工具、主动互动、语音决策、表情发送。整份文档的重心。</p>
+        <div class="cd-path">src/atri_qq_bot/</div>
+      </div>
+      <div class="card">
+        <div class="cd-title">atri_voice_service <span class="mono">≈0.4 万行</span></div>
+        <p>独立的本地语音 HTTP 服务：ASR 识别、TTS 合成（GPT-SoVITS / 原声素材）、歌声合成任务队列、质量门控。</p>
+        <div class="cd-path">src/atri_voice_service/</div>
+      </div>
+      <div class="card">
+        <div class="cd-title">atri_webui <span class="mono">≈0.7 万行</span></div>
+        <p>本机运维面板 + HTTP API。管理配置、模型档案、记忆、表情、语音/歌声、主动策略、Minecraft 桥接。</p>
+        <div class="cd-path">src/atri_webui/</div>
+      </div>
+      <div class="card">
+        <div class="cd-title">atri_desktop <span class="mono">≈0.09 万行</span></div>
+        <p>桌面宠物（Tkinter 透明置顶窗），展示亚托莉表情，右键菜单控制服务启停。</p>
+        <div class="cd-path">src/atri_desktop/</div>
+      </div>
+      <div class="card">
+        <div class="cd-title">tests + tools <span class="mono">≈1.9 万行</span></div>
+        <p>26 个测试文件（337 个用例）覆盖各模块；tools/ 下是启动脚本、语音训练、环境检查等辅助工具。</p>
+        <div class="cd-path">tests/ · tools/</div>
+      </div>
+      <div class="card">
+        <div class="cd-title">docs/prompts <span class="mono">17 个提示词</span></div>
+        <p>所有面向模型的静态提示词唯一维护位置。代码只负责「加载文件 + 填入运行时上下文」，不保存人格正文。</p>
+        <div class="cd-path">docs/prompts/</div>
+      </div>
+    </div>
+
+    <h3>运行中的服务拓扑</h3>
+    <div class="flow">
+      <div class="fline">
+        <span class="fbox">QQ 客户端</span><span class="farrow">⇄</span>
+        <span class="fbox">NapCat<span style="display:block;font-size:10px;color:var(--ink-faint)">Node 桥 · :6099</span></span><span class="farrow">⇄</span>
+        <span class="fbox hl">atri_qq_bot<span style="display:block;font-size:10px;color:var(--atri-red)">WS :8765/onebot</span></span>
+      </div>
+      <div class="fline" style="margin-left:44px">
+        <span class="farrow">└─→</span>
+        <span class="fbox svc">atri_webui<span style="display:block;font-size:10px;color:var(--teal)">http :8787</span></span>
+        <span class="farrow">└─→</span>
+        <span class="fbox svc">atri_voice_service<span style="display:block;font-size:10px;color:var(--teal)">http :8790</span></span>
+        <span class="farrow">└─→</span>
+        <span class="fbox svc">Ollama<span style="display:block;font-size:10px;color:var(--teal)">:11434</span></span>
+      </div>
+      <div class="fnote">注意：NapCat 是「反向 WebSocket 客户端」，主动连接主服务的 8765 端口；主服务只需保持监听。语音服务默认关闭，不阻塞文字聊天。</div>
+    </div>
+
+    <div class="note tip"><div class="nt">学习建议</div>
+      先跑通「一条私聊消息如何变成一句亚托莉回复」的完整链路（章节 04 → 05），
+      再逐个深入记忆（06）、工具（07）、语音（10）。其余模块可以按需查阅。
+    </div>
+  </section>
+
+  <!-- ============ 02 总体架构 ============ -->
+  <section id="architecture">
+    <div class="sec-head"><span class="num">02</span><h2>总体架构</h2></div>
+    <p class="sec-intro">
+      主服务内部按「边界清晰」的原则分层：OneBot 层只管消息生命周期，
+      回复引擎负责生成文本，消息规划负责把文本拆成可发送的消息，语音/表情只做附加。
+      下面是关键的数据流与核心边界。
+    </p>
+
+    <h3>一条消息的完整旅程</h3>
+    <div class="flow">
+      <div class="fline">
+        <span class="fbox">NapCat</span><span class="farrow">→</span>
+        <span class="fbox hl">server.handle_payload</span><span class="farrow">→</span>
+        <span class="fbox">会话队列 + 1.2s 防抖合并</span><span class="farrow">→</span>
+        <span class="fbox">should_reply 决策</span>
+      </div>
+      <div class="fline">
+        <span class="farrow" style="visibility:hidden">──</span>
+        <span class="farrow">→</span>
+        <span class="fbox">工具分析 ToolAnalyzer</span><span class="farrow">→</span>
+        <span class="fbox hl">AtriReplyEngine.reply</span><span class="farrow">→</span>
+        <span class="fbox">build_outgoing_messages</span><span class="farrow">→</span>
+        <span class="fbox">send_*_msg</span>
+      </div>
+      <div class="fnote">关键决策点都在 server.py 的 _handle_event 中串联；回复引擎只负责「生成最终文本」，不负责协议发送。</div>
+    </div>
+
+    <h3>核心边界（架构红线）</h3>
+    <p>项目交接文档（docs/PROJECT_HANDOFF.md）用一段话划清了各模块的职责边界，这是理解整个工程的关键：</p>
+    <div class="grid2">
+      <div class="card">
+        <div class="cd-title">onebot/server.py</div>
+        <p>负责消息生命周期与外部 QQ 交互。<strong>不负责</strong>编写人设提示词。</p>
+        <div class="cd-path">唯一的总调度器</div>
+      </div>
+      <div class="card">
+        <div class="cd-title">toolbox.py</div>
+        <p>负责「当前消息附带材料」的读取与分析。<strong>不负责</strong>决定最终人设回复。</p>
+        <div class="cd-path">图片 / 文档 / 视频 / 网页</div>
+      </div>
+      <div class="card">
+        <div class="cd-title">persona/core.py</div>
+        <p>把当前问题、记忆、工具结果组合成最终文本。<strong>不应伪造</strong>工具结果。</p>
+        <div class="cd-path">AtriReplyEngine</div>
+      </div>
+      <div class="card">
+        <div class="cd-title">message_plan/</div>
+        <p>把文本、表情、语音转换为可发送消息。<strong>不应重新生成</strong>内容。</p>
+        <div class="cd-path">拆分 / 附加表情 / 规划 kind</div>
+      </div>
+      <div class="card">
+        <div class="cd-title">voice/</div>
+        <p>语音决策、合成、质量门与发送。<strong>不应改变</strong>正常文本回复语义。</p>
+        <div class="cd-path">附加链路，失败回退文字</div>
+      </div>
+      <div class="card">
+        <div class="cd-title">WebUI</div>
+        <p>只修改配置与数据文件；运行中服务通过 <code class="inline">reload_config()</code> 热加载。</p>
+        <div class="cd-path">不直接改内存对象</div>
+      </div>
+    </div>
+
+    <h3>会话 ID 体系</h3>
+    <p>记忆和历史都按会话 ID 隔离，这是理解记忆系统（章节 06）的前提：</p>
+    <table>
+      <thead><tr><th>会话类型</th><th>ID 格式</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>私聊</td><td><code class="inline">private:&lt;user_id&gt;</code></td><td>机器人与单个用户</td></tr>
+        <tr><td>群聊整体</td><td><code class="inline">group:&lt;group_id&gt;</code></td><td>群上下文 / 群气氛</td></tr>
+        <tr><td>群内成员</td><td><code class="inline">group:&lt;group_id&gt;:user:&lt;user_id&gt;</code></td><td>群内个人档案</td></tr>
+      </tbody>
+    </table>
+    <div class="note warn"><div class="nt">隐私红线</div>
+      私聊记忆与群聊严格隔离：群聊提示词只能注入「群公开内容」，禁止引用任何成员的私聊记忆、好感度或白名单。
+    </div>
+
+    <h3>关键入口文件</h3>
+    <table>
+      <thead><tr><th>入口</th><th>文件</th><th>启动方式</th></tr></thead>
+      <tbody>
+        <tr><td>主机器人</td><td><code class="inline">src/atri_qq_bot/__main__.py</code></td><td><code class="inline">python -m atri_qq_bot</code></td></tr>
+        <tr><td>语音服务</td><td><code class="inline">src/atri_voice_service/__main__.py</code></td><td><code class="inline">python -m atri_voice_service</code></td></tr>
+        <tr><td>桌宠</td><td><code class="inline">src/atri_desktop/__main__.py</code></td><td><code class="inline">atri-desktop-pet</code>（GUI 脚本）</td></tr>
+        <tr><td>环境检查</td><td><code class="inline">tools/check_env.py</code></td><td><code class="inline">python tools/check_env.py</code></td></tr>
+      </tbody>
+    </table>
+    <p>
+      主进程启动时会先获取一个 Windows 互斥锁（<code class="inline">Global\AtriQQBotService</code>），
+      防止桌宠、启动器、手动命令并发拉起多个实例。
+    </p>
+  </section>
+
+  <!-- ============ 03 目录地图 ============ -->
+  <section id="repo">
+    <div class="sec-head"><span class="num">03</span><h2>目录地图</h2></div>
+    <p class="sec-intro">
+      以「你想找什么」为线索，而不是文件树顺序。点击目录树可展开子目录；右侧是每个目录的用途速查。
+    </p>
+
+    <div class="grid2" style="grid-template-columns:1.2fr 1fr">
+      <div>
+        <div class="tree" id="repoTree"></div>
+      </div>
+      <div>
+        <h4 style="margin-top:0">速查表</h4>
+        <table>
+          <thead><tr><th>想找…</th><th>去这里</th></tr></thead>
+          <tbody>
+            <tr><td>消息接收入口</td><td><code class="inline">onebot/server.py</code></td></tr>
+            <tr><td>人设回复逻辑</td><td><code class="inline">persona/core.py</code></td></tr>
+            <tr><td>用户记忆存储</td><td><code class="inline">memory.py</code> + <code class="inline">data/memory/users.json</code></td></tr>
+            <tr><td>语义检索</td><td><code class="inline">retrieval/</code> + SQLite FTS5</td></tr>
+            <tr><td>LLM 工具定义</td><td><code class="inline">llm_tools/schema.py</code></td></tr>
+            <tr><td>工具执行循环</td><td><code class="inline">llm_tools/tool_loop.py</code></td></tr>
+            <tr><td>材料解析</td><td><code class="inline">toolbox.py</code></td></tr>
+            <tr><td>消息拆分发送</td><td><code class="inline">message_plan/</code></td></tr>
+            <tr><td>语音决策</td><td><code class="inline">voice/manager.py</code> + <code class="inline">voice/policy.py</code></td></tr>
+            <tr><td>语音合成服务</td><td><code class="inline">atri_voice_service/</code></td></tr>
+            <tr><td>全部提示词</td><td><code class="inline">docs/prompts/*.md</code></td></tr>
+            <tr><td>所有配置项</td><td><code class="inline">config/schema.py</code> + <code class="inline">.env</code></td></tr>
+          </tbody>
+        </table>
+        <div class="note tip" style="margin-top:14px"><div class="nt">读码顺序建议</div>
+          config/schema.py（配置全景）→ onebot/server.py（调度）→ persona/core.py（回复）→ memory.py（记忆）→ llm_tools/（工具）
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 04 消息接入 OneBot ============ -->
+  <section id="onebot">
+    <div class="sec-head"><span class="num">04</span><h2>消息接入：OneBot 层</h2></div>
+    <p class="sec-intro">
+      主服务对外只做一件事：监听 NapCat 的反向 WebSocket，收事件、回消息。
+      所有外部协议细节都被收敛在 <code class="inline">onebot/</code> 包里。
+    </p>
+
+    <h3>协议角色</h3>
+    <p>
+      NapCat 是一个运行在 Windows 的 QQ 协议桥（Node 程序），登录你的机器人 QQ，
+      把 QQ 事件转成 OneBot v11 格式，并<strong>主动连接</strong>主服务的 WebSocket 端口。
+      主服务不需要了解 QQ 登录细节，也无需拉起 QQ 进程。
+    </p>
+    <div class="note warn"><div class="nt">反向 WebSocket 的含义</div>
+      是「NapCat 作为 WS 客户端来连我们」，不是我们去连 NapCat。
+      所以主服务必须<strong>先启动并保持监听</strong>；NapCat 断线时主服务不需要重启，
+      NapCat 恢复后会自动重连（配置中 <code class="inline">reconnectInterval: 5000</code>）。
+    </div>
+
+    <h3>关键文件</h3>
+    <table>
+      <thead><tr><th>文件</th><th>职责</th></tr></thead>
+      <tbody>
+        <tr><td><code class="inline">onebot/server.py</code></td><td>总调度器：WS 连接、事件分发、会话队列、发送动作（call_action）</td></tr>
+        <tr><td><code class="inline">onebot/message_parser.py</code></td><td>把 OneBot 消息段转成纯文本、提取戳一戳、回复引用</td></tr>
+        <tr><td><code class="inline">onebot/reply_policy.py</code></td><td>是否回复的决策：reply_mode、@检测、群聊触发词</td></tr>
+        <tr><td><code class="inline">onebot/message_batch.py</code></td><td>同一会话短时间内的多条消息合并</td></tr>
+        <tr><td><code class="inline">runtime/control.py</code></td><td>NapCat 运行状态发布、端口检测、隐藏进程启动</td></tr>
+      </tbody>
+    </table>
+
+    <h3>handle_payload：事件分流</h3>
+    <p>收到 WebSocket 帧后按事件类型分三条路：</p>
+    <ul>
+      <li><strong>echo/retcode</strong> → 是之前某个 action 的异步回包，交给 pending 请求。</li>
+      <li><strong>戳一戳 notice</strong> → 只有「目标是机器人」的才归一化进入对话链路，其他忽略。</li>
+      <li><strong>message</strong> → 进会话队列，等待处理。</li>
+    </ul>
+    <pre><code><span class="c"># onebot/server.py (简化)</span>
+async def handle_payload(self, websocket, raw_message):
+    event = json.loads(raw_message)
+    <span class="k">if</span> "echo" <span class="k">in</span> event <span class="k">and</span> "retcode" <span class="k">in</span> event:
+        <span class="k">return</span> self._resolve_pending_action(event)      <span class="c"># action 回包</span>
+    <span class="k">if</span> is_poke_event(event):
+        event = normalize_poke_event(event, self.config.bot_qq)      <span class="c"># 戳一戳</span>
+        <span class="k">if</span> event <span class="k">is</span> <span class="k">None</span>: <span class="k">return</span>
+    <span class="k">if</span> event.get(<span class="s">"post_type"</span>) == <span class="s">"message"</span>:
+        <span class="k">return</span> self._enqueue_message_event(websocket, event)  <span class="c"># 消息 → 队列</span>
+    task = asyncio.create_task(self._handle_event(websocket, event))</code></pre>
+
+    <h3>会话队列与防抖合并</h3>
+    <p>
+      每个会话（私聊/群聊/群成员）有一个独立 asyncio.Queue 和 worker。
+      worker 取出第一条消息后<strong>等 1.2 秒</strong>（<code class="inline">MESSAGE_DEBOUNCE_SECONDS</code>），
+      把窗口内积压的消息合并成一条，再串行处理。这避免了用户连发多条时机器人并行回复、上下文错乱。
+    </p>
+    <pre><code>queue_id = _message_queue_id(event)   <span class="c"># private:xxx / group:xxx / group:xxx:user:yyy</span>
+...
+<span class="k">async def</span> _conversation_worker(self, queue_id):
+    <span class="k">while</span> <span class="k">True</span>:
+        websocket, event = <span class="k">await</span> asyncio.wait_for(queue.get(), timeout=20.0)
+        batch = [(websocket, event)]
+        <span class="k">await</span> asyncio.sleep(MESSAGE_DEBOUNCE_SECONDS)   <span class="c"># 1.2s 窗口</span>
+        <span class="k">while</span> <span class="k">True</span>:
+            <span class="k">try</span>: batch.append(queue.get_nowait())
+            <span class="k">except</span> asyncio.QueueEmpty: <span class="k">break</span>
+        merged = _merge_message_batch(batch)
+        <span class="k">await</span> self._handle_event(merged_websocket, merged_event)</code></pre>
+
+    <h3>是否回复的决策</h3>
+    <p><code class="inline">should_reply()</code> 按 <code class="inline">REPLY_MODE</code> 决定：</p>
+    <table>
+      <thead><tr><th>模式</th><th>私聊</th><th>群聊</th></tr></thead>
+      <tbody>
+        <tr><td><code class="inline">private</code></td><td>回复</td><td>不回复</td></tr>
+        <tr><td><code class="inline">mention</code></td><td>回复</td><td>仅 @机器人 或提到「亚托莉 / atri」</td></tr>
+        <tr><td><code class="inline">smart</code></td><td>回复</td><td>@/提到 + 一组「亚托莉味」触发词（高性能、哼哒、帮我看看…）</td></tr>
+        <tr><td><code class="inline">all</code></td><td>回复</td><td>全部回复（不建议大群）</td></tr>
+      </tbody>
+    </table>
+    <p>
+      群聊还有一套 <code class="inline">GroupReplyFocus</code>（<code class="inline">group_reply_focus.py</code>）：
+      记录最近谁在说话、话题是否延续、以及「图片消息 + 后续 @」的临时绑定（TTL 60 秒），
+      让机器人在冷场延续或群友接着追问图片时能接上话。
+    </p>
+
+    <h3>发送动作 call_action</h3>
+    <p>所有向 QQ 的发送都通过 <code class="inline">call_action()</code> 发 OneBot action 到 NapCat：</p>
+    <ul>
+      <li><code class="inline">send_private_msg</code> / <code class="inline">send_group_msg</code> — 发文本</li>
+      <li><code class="inline">send_msg</code> 带 <code class="inline">record</code> 段 — 发语音</li>
+      <li><code class="inline">get_record</code> — 拉取用户语音转为本地文件（配合 ASR）</li>
+    </ul>
+
+    <div class="note danger"><div class="nt">写在业务里的禁止项</div>
+      不要把私聊隐私拼进群聊提示词；不要吞异常换固定兜底话术；不要把新功能堆进 server.py 的一个超长分支。
+    </div>
+  </section>
+
+  <!-- ============ 05 回复引擎 Persona ============ -->
+  <section id="reply">
+    <div class="sec-head"><span class="num">05</span><h2>回复引擎：Persona</h2></div>
+    <p class="sec-intro">
+      回复引擎 <code class="inline">AtriReplyEngine</code>（persona/core.py，约 3200 行）是「生成最终文本」的大脑。
+      人设提示词是代码固定约束，聊天内容不能随意改写它。
+    </p>
+
+    <h3>Prompt 体系</h3>
+    <p>
+      所有静态提示词存放在 <code class="inline">docs/prompts/</code>，通过 <code class="inline">prompting.py</code> 的
+      <code class="inline">load_prompt()</code> / <code class="inline">render_prompt()</code> 加载。
+      代码只负责「取文件 + 填运行时变量 + 传递工具结果」。
+    </p>
+    <table>
+      <thead><tr><th>提示词</th><th>作用</th></tr></thead>
+      <tbody>
+        <tr><td><code class="inline">atri_persona.md</code></td><td>人格核心：ATRI 的身份、性格、口癖、关系边界、能力真实性</td></tr>
+        <tr><td><code class="inline">reply_contract.md</code></td><td>回复长度、隐私、事实性、失败兜底规则</td></tr>
+        <tr><td><code class="inline">language_guard.md</code> / <code class="inline">language_retry.md</code></td><td>输出语言/格式检查与乱码重试</td></tr>
+        <tr><td><code class="inline">rewrite.md</code></td><td>答非所问、重复、模板化时的重写</td></tr>
+        <tr><td><code class="inline">comfort_repair.md</code></td><td>用户低落/疲惫/生气/纠错时的修复</td></tr>
+        <tr><td><code class="inline">group_chat.md</code></td><td>群聊参与、艾特、冷场与隐私边界</td></tr>
+        <tr><td><code class="inline">lore.md</code></td><td>原作设定（ATRI 的出身、夏生、海边小镇等）</td></tr>
+        <tr><td><code class="inline">tool_use.md</code></td><td>工具选择与联网搜索规则</td></tr>
+        <tr><td><code class="inline">visual_analysis.md</code></td><td>OCR、图片、表情包、视频帧分析规则</td></tr>
+        <tr><td><code class="inline">voice_policy.md</code></td><td>语音合成工具使用规则</td></tr>
+        <tr><td><code class="inline">proactive.md</code> + <code class="inline">proactive_topic_rule.md</code></td><td>主动消息生成与话题切入</td></tr>
+      </tbody>
+    </table>
+    <p>编辑原则：人格文件负责「她是谁、怎么说话」；运行规则负责「什么能做、什么不能声称做过」。涉及工具能力、隐私与安全的规则优先于角色扮演表达。</p>
+
+    <h3>reply() 的决策顺序</h3>
+    <p>一次回复不是直接丢给 LLM，而是按优先级走一系列「短路」分支：</p>
+    <ol>
+      <li><strong>好感度命令</strong> — <code class="inline">/好感度</code> 之类命令直接本地处理，不经过模型。</li>
+      <li><strong>严肃模式</strong> — 用户要求「说人话」等，切回认真模式并短暂压制抽象梗。</li>
+      <li><strong>纠错判断</strong> — <code class="inline">iteration/judge_correction()</code> 判断是否用户在纠错，记录迭代。</li>
+      <li><strong>安慰修复模式</strong> — 检测低落关键词，附加 comfort_repair 提示词。</li>
+      <li><strong>视觉失败兜底</strong> — 如果图片分析失败，用明确的失败话术，不假装看见。</li>
+      <li><strong>外貌直答</strong> — 「你长什么样」走稳定事实分支，避免模型发挥。</li>
+      <li><strong>真正调 LLM</strong> — <code class="inline">_reply_with_guarded_api()</code> 带完整上下文 + 工具。</li>
+    </ol>
+
+    <h3>上下文如何组装</h3>
+    <p>给模型的消息大致是：</p>
+    <pre><code>system:  <span class="s">atri_persona.md</span>          <span class="c"># 人格</span>
+system:  <span class="s">language_guard.md</span>        <span class="c"># 语言约束</span>
+system:  <span class="s">group_chat.md</span> (群聊时)   <span class="c"># 群聊边界</span>
+system:  <span class="s">记忆 recall_context</span>      <span class="c"># RAG 召回的「你知道的信息」</span>
+system:  <span class="s">工具说明 tool_use.md</span>     <span class="c"># 工具规则</span>
+user:    <span class="s">当前消息（+ 图片/文档/语音的分析结果）</span></code></pre>
+    <p>
+      记忆以 <code class="inline">recall_context()</code> 的稳定接口注入（详见章节 06），
+      回复引擎不关心底层是 FTS5 还是向量检索。
+    </p>
+
+    <h3>回复后的多重「质检 + 修复」</h3>
+    <p>LLM 生成原始回复后，引擎还会做多轮自我审查（<code class="inline">human_reply_pipeline_enabled</code>）：</p>
+    <ul>
+      <li><strong>历史 grounding 复核</strong> — 防止把模型自己的旧话当成用户事实。</li>
+      <li><strong>现实动作复核</strong> — 防止说「我拿起了杯子」「我在看窗外」这类未发生的动作。</li>
+      <li><strong>语言守卫</strong> — <code class="inline">language_guard/detector.py</code> 检测乱码、非法语言、符号垃圾。</li>
+      <li><strong>人设校验</strong> — <code class="inline">lore/</code> 检查是否越界、是否破坏设定。</li>
+      <li><strong>迭代修正</strong> — 用户指出「答非所问/重复/套话」后记录并调整后续回复。</li>
+    </ul>
+    <p>核心思想：<strong>失败回退是可控的、有边界的</strong>——只有模型/工具/合成明确失败才走降级，且错误说明要短，不混入异常堆栈。</p>
+  </section>
+
+  <!-- ============ 06 记忆与 RAG ============ -->
+  <section id="memory">
+    <div class="sec-head"><span class="num">06</span><h2>记忆系统与 RAG 检索</h2></div>
+    <p class="sec-intro">
+      记忆系统让亚托莉「记得」用户：爱好、习惯、好感度、群聊气氛、最近聊了什么。
+      它是整个项目里最「重」的子系统，也是 v0.3 的重点新增。
+    </p>
+
+    <h3>两层存储</h3>
+    <div class="grid2">
+      <div class="card">
+        <div class="cd-title">JSON 事实源</div>
+        <p><code class="inline">data/memory/users.json</code> 是<strong>唯一可编辑的事实源</strong>。存用户画像、结构化记忆、好感度、历史、主动互动状态。</p>
+        <div class="cd-path">memory.py · memory_parts/</div>
+      </div>
+      <div class="card">
+        <div class="cd-title">SQLite 检索索引</div>
+        <p><code class="inline">data/memory/semantic_memory.sqlite3</code> 是<strong>可删除、可重建的索引</strong>。默认 FTS5 全文索引；可选 bge-m3 向量二次召回。</p>
+        <div class="cd-path">retrieval/repository.py</div>
+      </div>
+    </div>
+    <div class="note tip"><div class="nt">设计要点</div>
+      「JSON 存事实、SQLite 只做检索」让两者职责分离：删掉 sqlite 文件不丢任何记忆，重建索引即可。
+      <code class="inline">MEMORY_RETRIEVAL_MAX_CHARS</code> 限制注入上下文的记忆总长度。
+    </div>
+
+    <h3>三级结构化记忆（L1 / L2 / L3）</h3>
+    <table>
+      <thead><tr><th>层级</th><th>内容</th><th>获取方式</th><th>重要度</th></tr></thead>
+      <tbody>
+        <tr><td><strong>L1</strong></td><td>稳定身份：称呼、兴趣、偏好、习惯</td><td>LLM 后台提取（memory_extraction）</td><td>0.95</td></tr>
+        <tr><td><strong>L2</strong></td><td>有时间/状态的事件：生日、考试、计划、重要事件</td><td>LLM 后台提取</td><td>0.72</td></tr>
+        <tr><td><strong>L3</strong></td><td>最近会话原文</td><td>程序自动保留（deque 最近 80 条）</td><td>0.45</td></tr>
+      </tbody>
+    </table>
+    <p>
+      记忆提取在<strong>独立后台线程</strong>进行（<code class="inline">memory_parts/ingestion.py</code> 的
+      <code class="inline">MemoryExtractionWorker</code>），即使本地模型超时也不影响回复链路。
+      提取前先由 <code class="inline">should_enqueue_memory()</code> 判断这条消息是否值得沉淀
+      （排除一次性情绪、无意义闲聊、群里转述），避免记忆污染。
+    </p>
+
+    <h3>从消息到记忆的管道</h3>
+    <div class="flow">
+      <div class="fline">
+        <span class="fbox">用户消息</span><span class="farrow">→</span>
+        <span class="fbox">observe_user()</span><span class="farrow">→</span>
+        <span class="fbox hl">MemoryExtractionWorker</span><span class="farrow">→</span>
+        <span class="fbox">ADD/UPDATE/DELETE 操作</span><span class="farrow">→</span>
+        <span class="fbox">写入 L1/L2</span>
+      </div>
+      <div class="fnote">LLM 提取遵守 docs/prompts/memory_extraction.md：只提取「新消息中明确或有充分证据」的信息；不提取密码、验证码等敏感信息；群聊只提取群体共同话题。</div>
+    </div>
+
+    <h3>好感度系统（affection）</h3>
+    <p>每个私聊用户有 0-100 的好感度，owner（主人）初始 72，普通用户 50。它只调节亲近程度，不直接报数值、不覆盖安全规则：</p>
+    <table>
+      <thead><tr><th>区间</th><th>状态</th><th>表现</th></tr></thead>
+      <tbody>
+        <tr><td>&lt; 35</td><td>冷淡</td><td>回复克制、偏任务型，少撒娇</td></tr>
+        <tr><td>35 - 50</td><td>普通</td><td>自然聊天，偶尔开心/遗憾</td></tr>
+        <tr><td>50 - 72</td><td>亲近</td><td>主动关心、延续旧话题</td></tr>
+        <tr><td>&gt; 72</td><td>亲密</td><td>可表达想念/吃醋，但用安全语言</td></tr>
+      </tbody>
+    </table>
+    <ul>
+      <li>对话会增减好感：正面/负面事件有每日上限（+1.4 / -1.15），防刷分。</li>
+      <li>长期不聊会衰减（idle decay），owner 衰减更慢。</li>
+      <li>好感度还影响主动互动频率和语音请求概率。</li>
+    </ul>
+
+    <h3>召回上下文：recall_context()</h3>
+    <pre><code><span class="c"># retrieval/planner.py 的 ContextRetrievalPlanner</span>
+<span class="k">def</span> build(self, profile, user_text) -> str:
+    scope = profile["conversation_id"]
+    <span class="k">if</span> self.settings.vector_enabled <span class="k">and</span> has_embeddings:
+        vec = <span class="k">await</span> ollama.embed(user_text)          <span class="c"># bge-m3 向量（可选）</span>
+        memories = _fuse(fts_results, vector_results)     <span class="c"># 融合两路结果</span>
+    lore = repository.search(<span class="s">"lore:atri"</span>, user_text)     <span class="c"># 仅涉及原作时召回</span>
+    <span class="k">return</span> self._render(profile, memories, lore)        <span class="c"># 渲染成模型可读文本</span></code></pre>
+    <ul>
+      <li>检索前先 <code class="inline">_sync_profile()</code> 把 JSON 里的 L1/L2 记忆同步进 SQLite 索引。</li>
+      <li>lore 索引来自 <code class="inline">docs/prompts/lore.md</code> 和 <code class="inline">atri_persona.md</code> 的分块。</li>
+      <li>检索是<strong>增强项</strong>：任何异常都回退到 <code class="inline">_format_recall_context()</code> 的纯 profile 渲染，绝不能阻断 QQ 回复。</li>
+    </ul>
+
+    <h3>用户画像的动态适配</h3>
+    <p>
+      <code class="inline">observe_user()</code> 会统计消息长度、回复间隔、表情频率、提问频率、话题词、纠错次数等，
+      生成「对话习惯画像」（如偏好长回复还是短回复、爱不爱用 emoji），
+      由回复引擎通过 <code class="inline">preferred_parts</code> 等字段动态调整拆分条数和表情概率。
+    </p>
+  </section>
+
+  <!-- ============ 07 LLM 工具系统 ============ -->
+  <section id="tools">
+    <div class="sec-head"><span class="num">07</span><h2>LLM 工具系统</h2></div>
+    <p class="sec-intro">
+      模型可以通过 Function Calling 自主调用工具获取实时信息。业务层只负责工具契约、超时、结果校验与错误边界，
+      不做关键词穷举替代模型判断。
+    </p>
+
+    <h3>可用工具</h3>
+    <table>
+      <thead><tr><th>工具</th><th>文件</th><th>用途</th></tr></thead>
+      <tbody>
+        <tr><td><code class="inline">get_current_time</code></td><td><code class="inline">time_tool.py</code></td><td>当前时间/日期/星期，支持时区</td></tr>
+        <tr><td><code class="inline">get_weather</code></td><td><code class="inline">weather_tool.py</code></td><td>open-meteo 天气查询（中文地点→经纬度）</td></tr>
+        <tr><td><code class="inline">search_web</code></td><td><code class="inline">web_search_tool.py</code></td><td>Bing / Google News / arXiv / GitHub 搜索 + 首条原文 grounding</td></tr>
+        <tr><td><code class="inline">open_web_page</code></td><td><code class="inline">web_page_tool.py</code></td><td>读取网页正文（HTML 解析 + 防 SSRF）</td></tr>
+        <tr><td><code class="inline">speak_as_atri</code></td><td><code class="inline">schema.py</code></td><td>语音合成请求（启用 TTS 时暴露）</td></tr>
+        <tr><td><code class="inline">final_answer</code></td><td><code class="inline">agent_protocol.py</code></td><td>Agent 协议模式下显式收尾（可选）</td></tr>
+      </tbody>
+    </table>
+    <p>工具是否暴露由配置决定：<code class="inline">available_tool_schemas(config)</code> 根据 <code class="inline">web_search_enabled</code>、<code class="inline">voice_tts_enabled</code> 等开关组合。</p>
+
+    <h3>工具调用循环 tool_loop</h3>
+    <pre><code><span class="c"># 一次工具调用的消息流</span>
+messages += [assistant(tool_calls=[...])]     <span class="c"># 模型请求调用</span>
+<span class="k">for</span> call <span class="k">in</span> tool_calls[:max_calls]:          <span class="c"># llm_tool_max_calls=2</span>
+    content = <span class="k">await</span> executor(name, args)    <span class="c"># 执行工具</span>
+    messages += [tool(tool_call_id, content)]  <span class="c"># 结果回填</span>
+<span class="c"># 再调一次 LLM，让模型基于工具结果给出最终回复</span></code></pre>
+    <ul>
+      <li>参数解析失败或执行失败时，注入「不要编造工具结果」的明确错误，而不是静默吞掉。</li>
+      <li>每次工具调用写入 <code class="inline">logs/llm-tools.jsonl</code>，便于排障。</li>
+      <li><code class="inline">_tool_result_failed()</code> 识别失败前缀（工具执行失败 / 未启用 / 搜索失败…）。</li>
+    </ul>
+
+    <h3>网络工具的可靠性设计</h3>
+    <div class="grid2">
+      <div class="card">
+        <div class="cd-title">搜索 grounding</div>
+        <p>搜索结果区分「搜索到」与「能够支持当前结论」：<code class="inline">_append_primary_source_excerpt()</code> 附加首条原文片段，并做相关性检查。无关结果不能作为证据。</p>
+        <div class="cd-path">web_search_tool.py</div>
+      </div>
+      <div class="card">
+        <div class="cd-title">网页读取防 SSRF</div>
+        <p><code class="inline">open_web_page</code> 校验 URL 必须是公网主机名，拒绝内网/保留 IP，防止读取本地敏感服务；提取正文有字节上限（1.5MB）和字符上限（8000）。</p>
+        <div class="cd-path">web_page_tool.py</div>
+      </div>
+    </div>
+
+    <h3>Material Toolbox：消息附带的材料</h3>
+    <p>
+      与「模型自主调工具」并列的是 <code class="inline">toolbox.py</code>：用户在 QQ 里发的<strong>图片、文档、表格、视频、网页链接</strong>。
+      它不靠模型决策，而是在每次回复前由 <code class="inline">ToolAnalyzer.analyze()</code> 主动解析：
+    </p>
+    <table>
+      <thead><tr><th>材料</th><th>处理方式</th></tr></thead>
+      <tbody>
+        <tr><td>文本文件 (.txt/.md/.csv)</td><td>抽取正文，截断到 MAX_TEXT_CHARS</td></tr>
+        <tr><td>文档 (.docx/.pdf)</td><td>pypdf 抽取文本、docx 解 zip 抽 XML 文本</td></tr>
+        <tr><td>表格 (.xlsx)</td><td>读取 sheet 行，数值列做概览（均值/分布）</td></tr>
+        <tr><td>图片</td><td>OCR（rapidocr）+ 本地视觉模型（qwen3-vl）识图与审美</td></tr>
+        <tr><td>视频</td><td>ffmpeg 抽关键帧（最多 4 帧）+ 视觉模型分析</td></tr>
+        <tr><td>网页/B站</td><td>HTML 提取正文 / B站 API 拉标题字幕</td></tr>
+      </tbody>
+    </table>
+    <div class="note warn"><div class="nt">视觉链路硬约束</div>
+      当前图片优先于旧图片；没有图片时不得声称「看到了」；视觉模型无法确认身份时必须说「未确认」；
+      聊天模型和视觉模型共用 Ollama 且显存不足时<strong>串行加载</strong>，不能并发硬挤显存。
+    </div>
+
+    <h3>Agent 协议（可选）</h3>
+    <p>
+      开启 <code class="inline">LLM_AGENT_PROTOCOL_ENABLED</code> 后启用多步协商：模型可以在多轮内决定动作，最终用
+      <code class="inline">final_answer</code> 收尾。默认关闭，普通单轮工具循环已足够。
+    </p>
+  </section>
+
+  <!-- ============ 08 消息规划与表情 ============ -->
+  <section id="plan">
+    <div class="sec-head"><span class="num">08</span><h2>消息规划与表情</h2></div>
+    <p class="sec-intro">
+      回复文本生成后，进入发送前的「规划」阶段：拆成多条短消息模拟流式、按情绪附一张表情。
+      这一层<strong>不重新生成内容</strong>，只做转换。
+    </p>
+
+    <h3>OutgoingMessage</h3>
+    <p>规划产物是统一的中间对象：</p>
+    <pre><code><span class="c"># message_plan/schema.py</span>
+<span class="k">@dataclass</span>(frozen=True)
+<span class="k">class</span> OutgoingMessage:
+    kind: Literal[<span class="s">"text"</span>, <span class="s">"image"</span>, <span class="s">"face"</span>, <span class="s">"record"</span>]   <span class="c"># 文本/图片/QQ表情/语音</span>
+    content: str                                    <span class="c"># 文本内容 or 文件 URL or face id</span></code></pre>
+    <p><code class="inline">outgoing_to_onebot_message()</code> 负责把 OutgoingMessage 转成 OneBot 消息段数组。</p>
+
+    <h3>文本拆分</h3>
+    <p><code class="inline">split_reply_text()</code> 把长回复按句子/逗号/空格切成不超过
+      <code class="inline">MESSAGE_SPLIT_MAX_CHARS</code>（默认 44 字符）的片段，最多
+      <code class="inline">MESSAGE_SPLIT_MAX_PARTS</code>（默认 4）条。每条之间还有随机延迟（0.55-1.35s）模拟打字节奏。</p>
+    <pre><code><span class="c"># 效果：长回复被拆成多条短消息，避免刷屏</span>
+回复1: 哼，高性能亚托莉上线啦。
+回复2: 你刚才说的那个项目我记着呢。
+回复3: 要不要先试试搜索最新资料？ [表情]</code></pre>
+    <p>发送之间会参考用户画像的 <code class="inline">preferred_parts</code>（历史偏好条数）动态调整。</p>
+
+    <h3>表情系统</h3>
+    <p><code class="inline">sticker_parts/core.py</code> 定义了情绪分类与发送优先级：</p>
+    <pre><code>发送优先级：
+  手动添加本地表情 > 聊天记录归档表情 > 默认联网缓存 > 网页 URL > QQ 自带表情 + emoji</code></pre>
+    <ul>
+      <li>目录结构：<code class="inline">data/stickers/&lt;emotion&gt;/</code>，情绪包括 happy/comfort/tired/proud/confused/shy/food/goodnight 等。</li>
+      <li><code class="inline">StickerManager.choose()</code> 根据用户文本 + 回复文本检测情绪，按概率（<code class="inline">STICKER_CHANCE</code>）选择表情，带冷却时间。</li>
+      <li>自定义触发词：<code class="inline">data/stickers/triggers.json</code>，如「高性能 → proud」。</li>
+      <li>自动捕获：聊天记录里的图片会归档到 <code class="inline">data/stickers/_chat_history</code>，之后可复用。</li>
+    </ul>
+
+    <h3>OneBot 发送适配</h3>
+    <p>
+      发送时 <code class="inline">call_action()</code> 会根据消息类型调用
+      <code class="inline">send_private_msg</code> / <code class="inline">send_group_msg</code>，
+      语音则发送 <code class="inline">record</code> 段（本地文件走 base64）。发送结果会记录到
+      <code class="inline">logs/reply-events.jsonl</code>。
+    </p>
+  </section>
+
+  <!-- ============ 09 主动互动 ============ -->
+  <section id="proactive">
+    <div class="sec-head"><span class="num">09</span><h2>主动互动</h2></div>
+    <p class="sec-intro">
+      不只是「被动回复」，亚托莉还会主动找人：早安、空闲关心、群聊冷场插话。
+      这套逻辑在 <code class="inline">proactive/</code> 包和 <code class="inline">memory.py</code> 的定时器里。
+    </p>
+
+    <h3>三类主动行为</h3>
+    <table>
+      <thead><tr><th>行为</th><th>默认</th><th>触发条件</th></tr></thead>
+      <tbody>
+        <tr><td>早安问候</td><td>开启 · 07:30</td><td>每天早上一次；只发给 OWNER_QQ 或私聊过的人</td></tr>
+        <tr><td>空闲关心</td><td>开启 · 空闲 180min · 冷却 720min</td><td>私聊空闲 X 分钟后轻量问候（.env.example 示例值为 120/480，schema 默认 180/720）</td></tr>
+        <tr><td>群聊冷场插话</td><td>开启 · 冷场 90min · 冷却 240min</td><td>群聊冷场后低频插一句，单群每日最多 3 次（.env.example 示例值为 60/180，schema 默认 90/240）</td></tr>
+      </tbody>
+    </table>
+    <p>
+      触发后由 <code class="inline">generate_proactive_message()</code> 生成内容：先判断配置
+      （<code class="inline">use_ai</code>、<code class="inline">ai_enabled</code>），再组装 profile + 历史 + 话题规则，
+      最后调 LLM 生成，并做「现实 grounding 复核」防止编造用户状态。
+    </p>
+
+    <h3>主动规划 v2（可选）</h3>
+    <p>
+      <code class="inline">PROACTIVE_V2_ENABLED</code> 开启后使用 <code class="inline">proactive/planner.py</code>：
+      按好感度分层（冷淡/普通/亲近/亲密），每层有不同的打扰频率、安静时段、事件类型
+      （morning/goodnight/check_in/continue_topic/interest_topic/guided_topic/daily_share/affection/encouragement）。
+      计划写入记忆，由定时器检查是否到期。默认关闭，使用旧版 idle/morning 循环。
+    </p>
+    <pre><code><span class="c"># 一个主动计划的大致形状</span>
+{
+  <span class="s">"tier"</span>: <span class="s">"close"</span>,            <span class="c"># 亲密度分层</span>
+  <span class="s">"event_type"</span>: <span class="s">"continue_topic"</span>, <span class="c"># 事件类型</span>
+  <span class="s">"scheduled_at"</span>: <span class="s">"2026-08-17T19:00:00+08:00"</span>,
+  <span class="s">"cooldown"</span>: <span class="n">36</span>               <span class="c"># 小时</span>
+}</code></pre>
+
+    <h3>防骚扰机制</h3>
+    <ul>
+      <li>所有主动消息都有冷却时间与每日上限。</li>
+      <li>安静时段不打扰（由 <code class="inline">proactive/policy.py</code> 的 quiet_hours 控制）。</li>
+      <li>用户连续忽略会降低打扰频率（<code class="inline">ignored_streak</code> 累加）。</li>
+      <li>群聊主动消息必须「多人可参与、不点名个人、不使用私聊记忆」。</li>
+    </ul>
+  </section>
+
+  <!-- ============ 10 语音与歌声 ============ -->
+  <section id="voice">
+    <div class="sec-head"><span class="num">10</span><h2>语音与歌声</h2></div>
+    <p class="sec-intro">
+      语音是<strong>附加链路</strong>，不是文本的替代。文本已经生成后，语音策略再决定是否附加。
+      默认关闭，失败自动回退文字，不影响聊天。
+    </p>
+
+    <h3>两个进程的分工</h3>
+    <table>
+      <thead><tr><th>进程</th><th>目录</th><th>职责</th></tr></thead>
+      <tbody>
+        <tr><td>QQ 主进程</td><td><code class="inline">src/atri_qq_bot/voice/</code></td><td>语音<strong>决策</strong>：是否发语音、请求 TTS、发送 record</td></tr>
+        <tr><td>语音服务</td><td><code class="inline">src/atri_voice_service/</code></td><td>语音<strong>执行</strong>：ASR、TTS 合成、原声匹配、歌声任务</td></tr>
+      </tbody>
+    </table>
+    <p>两者通过 HTTP（默认 <code class="inline">http://127.0.0.1:8790</code>）通信。</p>
+
+    <h3>语音决策链（QQ 主进程侧）</h3>
+    <div class="flow">
+      <div class="fline">
+        <span class="fbox">用户语音 → ASR 转文本</span><span class="farrow">→</span>
+        <span class="fbox">模型可自主调用 speak_as_atri</span><span class="farrow">→</span>
+        <span class="fbox hl">显式请求保护器</span><span class="farrow">→</span>
+        <span class="fbox">voice_policy 评估</span><span class="farrow">→</span>
+        <span class="fbox">合成 → 质量门 → 发送</span>
+      </div>
+      <div class="fnote">「用语音回复我」「读出来」「唱两句」会被显式请求保护器（explicit_delivery_intent）补建语音请求，即使模型漏调工具。</div>
+    </div>
+    <p><code class="inline">voice/manager.py</code> 的 <code class="inline">VoiceManager</code> 负责调度，
+      <code class="inline">voice/policy.py</code> 的 <code class="inline">evaluate_voice_request()</code> 根据
+      明确要求、情绪、概率、好感度、群聊开关、冷却时间决定是否放行。</p>
+
+    <h3>语音服务内部（atri_voice_service）</h3>
+    <pre><code>SpeechApplication
+├─ ConversationSpeechPipeline     <span class="c"># mode=speech 日常语音</span>
+│  ├─ 完整原声匹配 (original_library.py)
+│  ├─ GPT-SoVITS 合成 (providers.py)
+│  └─ ASR 回读检查 → 重试 → 中性补救 → 拒发
+└─ SingingService                 <span class="c"># mode=singing 歌声任务</span>
+   └─ SingingJobManager           <span class="c"># 人声分离 + SVC + 混音 + 质量检查</span></code></pre>
+    <ul>
+      <li><strong>ASR</strong>：SenseVoice + FSMN-VAD 分段，支持热词（asr-hotwords.json）与口音矫正。</li>
+      <li><strong>TTS</strong>：GPT-SoVITS 主引擎；优先匹配官方原声素材（<code class="inline">ATRI训练音频素材</code> 目录），相似度 ≥0.94 才直接发原声。</li>
+      <li><strong>质量门</strong>：合成后用 SenseVoice 回读，计算汉字 + 带声调拼音错误率；超阈值用不同 seed 重试；全部失败切中文救援档案；仍失败则拒发并回退文字。</li>
+      <li><strong>流式语音</strong>：长文本按语义段（默认 34 发音单位）切分，每段合成完立即发送，支持说话中被打断。</li>
+    </ul>
+
+    <h3>歌声合成</h3>
+    <p>
+      歌声走异步任务：<code class="inline">POST /v1/singing/jobs</code> 提交 → <code class="inline">SingingJobManager</code> 排队 →
+      人声分离 → 乐理分段 → SVC 转换 → 混音 → 质量检查 → 导出。任务进度可查询、可取消。
+      生成式唱歌依赖外部工具链（种子声源 + 训练管线），未配置时不影响普通 TTS。
+    </p>
+
+    <h3>关键配置</h3>
+    <pre><code>VOICE_ASR_ENABLED=false        <span class="c"># 语音输入（默认关）</span>
+VOICE_TTS_ENABLED=false        <span class="c"># 语音输出（默认关）</span>
+VOICE_SERVICE_URL=http://127.0.0.1:8790
+VOICE_PROFILE=atri-official-v2pro-curated
+VOICE_SEGMENT_MAX_CHARS=34     <span class="c"># 语音切段粒度</span></code></pre>
+  </section>
+
+  <!-- ============ 11 WebUI ============ -->
+  <section id="webui">
+    <div class="sec-head"><span class="num">11</span><h2>WebUI 管理面板</h2></div>
+    <p class="sec-intro">
+      <code class="inline">atri_webui</code> 是本机运维面板（默认 <code class="inline">http://127.0.0.1:8787</code>），
+      用标准库 <code class="inline">http.server</code> 实现（无框架依赖），前后端一体。
+    </p>
+
+    <h3>页面与 API</h3>
+    <div class="grid3">
+      <div class="card"><div class="cd-title">配置管理</div><p>查看/编辑 .env；敏感字段（API Key）脱敏显示</p><div class="cd-path">config_admin.py</div></div>
+      <div class="card"><div class="cd-title">模型档案</div><p>聊天/视觉/向量三类模型分开管理；扫描本地 Ollama 模型</p><div class="cd-path">model_profiles.py</div></div>
+      <div class="card"><div class="cd-title">记忆管理</div><p>按用户列表查看画像、好感度、群聊信息，支持编辑与备份</p><div class="cd-path">memory_admin.py</div></div>
+      <div class="card"><div class="cd-title">表情管理</div><p>浏览/上传/删除表情，按情绪分类</p><div class="cd-path">sticker_admin.py</div></div>
+      <div class="card"><div class="cd-title">语音管理</div><p>音色档案、ASR 热词、TTS 发音、试听测试</p><div class="cd-path">voice_admin.py</div></div>
+      <div class="card"><div class="cd-title">Minecraft 桥</div><p>向游戏桥发 follow/wait/stop 等命令（实验性）</p><div class="cd-path">minecraft_admin.py</div></div>
+    </div>
+    <p>
+      API 路由集中在 <code class="inline">webui/server.py</code>（GET/POST 各约 20 个端点），
+      前端是 <code class="inline">page.py</code> 返回的单页 HTML。WebUI 只绑定回环地址，避免暴露到局域网。
+    </p>
+
+    <h3>热加载机制</h3>
+    <p>
+      WebUI 修改配置后调用 <code class="inline">WebUIState.reload_config()</code>，
+      运行中的服务据此重建轻量对象（如检索 Planner、VoiceManager 配置），不需要重启。
+      修改 <code class="inline">.env</code> 与 <code class="inline">data/webui/*.json</code> 都会持久化。
+    </p>
+    <div class="note warn"><div class="nt">边界</div>
+      WebUI 只改配置和数据文件；不能直接改内存对象。重启后配置必须仍然存在。
+    </div>
+
+    <h3>本地模型扫描的「发现 ≠ 可用」</h3>
+    <p>
+      <code class="inline">/api/local-models</code> 扫描本地 Ollama 模型目录，但文件存在不等于 Ollama 已注册可运行。
+      UI 明确区分「发现文件」与「实际可调用」，启用前会验证 provider / base URL / 模型名 / 本地实际运行状态。
+    </p>
+  </section>
+
+  <!-- ============ 12 桌宠 ============ -->
+  <section id="desktop">
+    <div class="sec-head"><span class="num">12</span><h2>桌面宠物</h2></div>
+    <p class="sec-intro">
+      <code class="inline">atri_desktop</code> 用 Tkinter 实现一个透明置顶的小亚托莉，
+      是 Windows 上最常用的启动入口。
+    </p>
+
+    <h3>功能</h3>
+    <ul>
+      <li><strong>表情切换</strong>：idle/happy/sleepy/cry 等 8 种表情，根据服务状态切换。</li>
+      <li><strong>右键菜单</strong>：启动亚托莉、停止、打开 WebUI、打开项目文件夹、查看状态。</li>
+      <li><strong>拖拽</strong>：按住拖动位置，自动吸附屏幕边缘。</li>
+      <li><strong>单实例</strong>：Windows 互斥锁 + PID 文件，防止多开。</li>
+    </ul>
+
+    <h3>启动链</h3>
+    <pre><code><span class="p">QQ.lnk</span>（原 QQ 图标）
+  └─ 后台监听器接管
+     ├─ 拉起可见 NapCat QQ（专用 Electron profile）
+     ├─ 后台启动 Ollama
+     └─ 后台启动 atri_qq_bot（pythonw 无终端）
+  桌宠右键菜单同样可手动控制</code></pre>
+    <p>关键实现：<code class="inline">controller.py</code>（进程控制）、<code class="inline">single_instance.py</code>（单实例锁）、<code class="inline">app.py</code>（UI 与拖拽）。</p>
+  </section>
+
+  <!-- ============ 13 本地部署与启动 ============ -->
+  <section id="deploy">
+    <div class="sec-head"><span class="num">13</span><h2>本地部署与启动</h2></div>
+    <p class="sec-intro">
+      从零跑起来的完整步骤。推荐先「最小可运行」，再逐步打开语音等可选模块。
+    </p>
+
+    <h3>前提</h3>
+    <ul>
+      <li>Windows + Python 3.11+（完整安装，含 pip / venv）</li>
+      <li>NapCat 或 NapCat Shell（负责 QQ 登录与协议桥）</li>
+      <li>（可选）Ollama 用于本地模型；也可填 OpenAI 兼容 API</li>
+    </ul>
+
+    <h3>安装</h3>
+    <pre><code><span class="c"># PowerShell（项目根目录）</span>
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e .
+Copy-Item .env.example .env</code></pre>
+    <p>核心依赖：<code class="inline">httpx</code>（API/HTTP）、<code class="inline">websockets</code>（OneBot 反向 WS）、
+      <code class="inline">python-dotenv</code>（配置）、<code class="inline">Pillow</code>/<code class="inline">rapidocr</code>/<code class="inline">onnxruntime</code>（图像/OCR）、
+      <code class="inline">pypdf</code>（PDF）、<code class="inline">imageio-ffmpeg</code>（视频帧）。</p>
+
+    <h3>最小配置（.env 关键项）</h3>
+    <pre><code>BOT_QQ=你的机器人QQ
+REPLY_MODE=smart
+# 模型：不填 OPENAI_API_KEY 也能跑，但只会用本地规则兜底回复
+OPENAI_API_KEY=ollama
+OPENAI_BASE_URL=http://127.0.0.1:11434/v1
+OPENAI_MODEL=qwen3:4b-instruct</code></pre>
+
+    <h3>启动与验收</h3>
+    <pre><code>python tools/check_env.py            <span class="c"># 1. 环境自检</span>
+python -m atri_qq_bot                <span class="c"># 2. 前台启动（监听 ws://127.0.0.1:8765/onebot）</span></code></pre>
+    <p>验收顺序：</p>
+    <ol>
+      <li><code class="inline">8765</code> 正在监听，NapCat OneBot 已连接。</li>
+      <li><code class="inline">http://127.0.0.1:8787</code> WebUI 可访问。</li>
+      <li><code class="inline">/api/test-chat</code> 返回 <code class="inline">ok=true, used_ai=true</code>。</li>
+      <li>（可选）<code class="inline">http://127.0.0.1:8790/health</code> 语音服务就绪。</li>
+    </ol>
+
+    <h3>NapCat 接线</h3>
+    <p>在 NapCat 登录机器人 QQ，添加一个 OneBot v11 反向 WebSocket 客户端：</p>
+    <ul>
+      <li>类型：反向 WebSocket / WebSocket Client</li>
+      <li>地址：<code class="inline">ws://127.0.0.1:8765/onebot</code></li>
+      <li>OneBot 版本：v11（消息格式 array）</li>
+    </ul>
+    <p>项目自带的 <code class="inline">napcat-onebot11-config.json</code> 是可直接参考的 NapCat 配置。</p>
+    <div class="note tip"><div class="nt">小白捷径</div>
+      直接用桌宠图标启动：双击「亚托莉桌宠」→ 右键 → 启动亚托莉。
+      监听器会自动拉起 NapCat QQ、Ollama 和主服务，无需手动开终端。
+    </div>
+
+    <h3>常用启动脚本</h3>
+    <table>
+      <thead><tr><th>脚本</th><th>作用</th></tr></thead>
+      <tbody>
+        <tr><td><code class="inline">tools/check_env.py</code></td><td>环境自检（端口、依赖、配置）</td></tr>
+        <tr><td><code class="inline">tools/launch/atri/start-atri.bat</code></td><td>启动主服务</td></tr>
+        <tr><td><code class="inline">安装桌宠亚托莉.bat</code></td><td>安装桌宠快捷方式</td></tr>
+        <tr><td><code class="inline">停止亚托莉.bat</code></td><td>彻底停止</td></tr>
+        <tr><td><code class="inline">检查亚托莉状态.bat</code></td><td>查看运行状态</td></tr>
+      </tbody>
+    </table>
+
+    <h3>云端部署（24h 在线）</h3>
+    <p>想让亚托莉在你关机后也在线，需要把项目 + NapCat 搬到云服务器/NAS，见
+      <code class="inline">deploy/cloud/README.md</code>（systemd 服务 + install-ubuntu.sh）。模型接口也必须云端可用。</p>
+  </section>
+
+  <!-- ============ 14 二次开发指南 ============ -->
+  <section id="develop">
+    <div class="sec-head"><span class="num">14</span><h2>二次开发指南</h2></div>
+    <p class="sec-intro">
+      想改代码？先理解项目的「开发纪律」——它决定哪些改动是安全的、哪些会破坏架构。
+    </p>
+
+    <h3>新功能接入流程</h3>
+    <p>项目交接文档规定，开发必须先按顺序回答：</p>
+    <ol>
+      <li>先描述现有链路：入口、配置、运行时对象、持久化、发送出口、失败出口。</li>
+      <li>明确新功能属于哪个边界：OneBot / 工具 / 回复 / 人设 / 记忆 / 语音 / WebUI / 独立服务。</li>
+      <li>先加配置 schema → loader → WebUI 展示与持久化 → 再接运行时；配置要有默认值和关闭开关。</li>
+      <li>新模型先做独立健康检查与最小调用，不直接替换生产模型。</li>
+      <li>写单元测试（成功/超时/空结果/错误响应/模型切换/重启持久化）。</li>
+      <li>端到端测试并保存可观测日志。</li>
+    </ol>
+
+    <h3>配置新增三步</h3>
+    <pre><code><span class="c"># 1. schema.py 加字段（含默认值）</span>
+<span class="k">class</span> BotConfig:
+    my_new_flag: bool = False
+
+<span class="c"># 2. loader.py 从 .env 读取并校验</span>
+my_new_flag = _env_bool(<span class="s">"MY_NEW_FLAG"</span>, False)
+
+<span class="c"># 3. 需要时在 webui/config_admin.py 暴露</span></code></pre>
+
+    <h3>添加一个新 LLM 工具</h3>
+    <ol>
+      <li>在 <code class="inline">llm_tools/</code> 新建 <code class="inline">xxx_tool.py</code>，实现处理函数。</li>
+      <li>在 <code class="inline">schema.py</code> 写工具 JSON Schema，并加入 <code class="inline">available_tool_schemas()</code>。</li>
+      <li>在 <code class="inline">registry.py</code> 注册 handler。</li>
+      <li>在 <code class="inline">docs/prompts/tool_use.md</code> 补充工具使用规则。</li>
+      <li>写测试（<code class="inline">tests/test_llm_tools.py</code>）。</li>
+    </ol>
+
+    <h3>测试</h3>
+    <pre><code>python -m pip install -e ".[dev]"
+python -m pytest          <span class="c"># 当前基线：337 passed</span></code></pre>
+    <p>测试覆盖：onebot、persona、memory、retrieval、llm_tools、toolbox、voice、singing、webui、desktop 等 26 个文件。</p>
+
+    <h3>开发禁止事项（红线）</h3>
+    <ul>
+      <li>不要把新功能塞进 <code class="inline">server.py</code> 的超长分支（除非只是外部事件编排）。</li>
+      <li>不要吞异常换固定兜底话术。</li>
+      <li>不要把私聊隐私拼进群聊提示词。</li>
+      <li>不要让 WebUI 只改前端显示而不写入持久化文件。</li>
+      <li>不要同时常驻多个高显存模型。</li>
+      <li>不要用 <code class="inline">git reset --hard</code> / 批量回退来「恢复稳定」。</li>
+    </ul>
+  </section>
+
+  <!-- ============ 15 排错速查 ============ -->
+  <section id="trouble">
+    <div class="sec-head"><span class="num">15</span><h2>排错速查</h2></div>
+    <p class="sec-intro">结合 DEVELOPER.md 与 PROJECT_HANDOFF.md 的常见问题与排查顺序。</p>
+
+    <h3>日志在哪</h3>
+    <table>
+      <thead><tr><th>日志</th><th>内容</th></tr></thead>
+      <tbody>
+        <tr><td><code class="inline">logs/project-YYYY-MM-DD.log</code></td><td>统一日志（LOG_LEVEL 控制）</td></tr>
+        <tr><td><code class="inline">logs/onebot-events.log</code></td><td>OneBot 原始事件</td></tr>
+        <tr><td><code class="inline">logs/reply-events.jsonl</code></td><td>回复链路（used_ai、阶段、错误）</td></tr>
+        <tr><td><code class="inline">logs/llm-tools.jsonl</code></td><td>工具调用记录</td></tr>
+        <tr><td><code class="inline">logs/vision-events.jsonl</code></td><td>视觉分析</td></tr>
+        <tr><td><code class="inline">logs/voice-events.log</code></td><td>语音决策/合成失败</td></tr>
+      </tbody>
+    </table>
+    <div class="note tip"><div class="nt">排查顺序</div>
+      1) 消息是否进入 OneBot / 会话队列？→ 2) reply-events.jsonl 的 used_ai 与错误？→
+      3) 有材料看 vision 日志 → 4) 文本正常仅语音失败，只查 VoiceManager→语音服务链路 → 5) WebUI 改动重启丢失，查 .env 与 data/webui/*.json。
+    </div>
+
+    <h3>常见问题</h3>
+    <table>
+      <thead><tr><th>现象</th><th>处理</th></tr></thead>
+      <tbody>
+        <tr><td>NapCat 断开</td><td>WebUI 开发页确认 8765 监听；NapCat WebUI 确认 WS Client 地址；QQ 掉线就重新登录；ATRI 保持运行会自动重连</td></tr>
+        <tr><td>WebUI 打不开 / 端口冲突</td><td><code class="inline">python tools/check_env.py</code>；改 <code class="inline">WEBUI_PORT</code></td></tr>
+        <tr><td>依赖缺失</td><td>先 check_env，再 <code class="inline">pip install -r requirements.txt</code></td></tr>
+        <tr><td>视觉模型加载慢</td><td>首次冷加载 55s+ 是显存串行调度的正常代价，不要常驻模型</td></tr>
+        <tr><td>语音合成失败</td><td>只查语音链路；失败自动回退文字，不影响聊天</td></tr>
+        <tr><td>记忆检索失效</td><td>检索是增强项，失败自动回退 profile 渲染；可删除 sqlite 重建索引</td></tr>
+      </tbody>
+    </table>
+
+    <h3>端口总览</h3>
+    <div class="tbl-wrap">
+    <table class="port-table">
+      <thead><tr><th>端口</th><th>服务</th><th>用途</th></tr></thead>
+      <tbody>
+        <tr><td>8765</td><td>主服务</td><td>OneBot 反向 WS（NapCat 连这里）</td></tr>
+        <tr><td>8787</td><td>WebUI</td><td>管理面板</td></tr>
+        <tr><td>8790</td><td>语音服务</td><td>ASR / TTS HTTP</td></tr>
+        <tr><td>6099</td><td>NapCat</td><td>NapCat WebUI</td></tr>
+        <tr><td>11434</td><td>Ollama</td><td>本地模型</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <!-- ============ 结尾 ============ -->
+  <section id="end" style="margin-top:48px">
+    <div class="card" style="text-align:center; padding:28px">
+      <div style="font-size:15px; font-weight:700; color:var(--atri-red)">// 学习完成，输出确认</div>
+      <p style="font-size:13.5px">
+        亚托莉这台「高性能仿生人」的源码主干已经梳理完毕。
+        下一步建议：亲手跑通一条消息 → 在 WebUI 里看记忆与配置 → 试着按章节 14 的流程加一个小工具。
+      </p>
+      <p style="font-family:var(--mono); font-size:12px; color:var(--ink-faint)">
+        YHN-04B · Atri QQ Bot v0.3 · Study Notes
+      </p>
+    </div>
+  </section>
+
+</div>
+</main>
+</div>
+
+<script>
+  // ===== 目录树数据 =====
+  const repoTree = [
+    { n: 'src', d: 1, kids: [
+      { n: 'atri_qq_bot', d: 1, kids: [
+        { n: 'onebot', d: 1, cmt: 'WS接入·队列·发送', kids: [
+          { n: 'server.py', cmt: '总调度器' },
+          { n: 'message_parser.py', cmt: '消息段→文本' },
+          { n: 'reply_policy.py', cmt: '是否回复' },
+          { n: 'message_batch.py', cmt: '防抖合并' },
+        ]},
+        { n: 'persona', d: 1, cmt: '回复引擎', kids: [
+          { n: 'core.py', cmt: 'AtriReplyEngine' },
+        ]},
+        { n: 'memory_parts', d: 1, cmt: '记忆', kids: [
+          { n: 'core.py', cmt: '常量/画像' },
+          { n: 'ingestion.py', cmt: '后台提取' },
+        ]},
+        { n: 'memory.py', cmt: 'UserMemoryStore' },
+        { n: 'retrieval', d: 1, cmt: 'RAG', kids: [
+          { n: 'repository.py', cmt: 'SQLite FTS5' },
+          { n: 'planner.py', cmt: '上下文拼装' },
+          { n: 'embeddings.py', cmt: 'bge-m3 可选' },
+        ]},
+        { n: 'llm_tools', d: 1, cmt: 'Function Calling', kids: [
+          { n: 'schema.py', cmt: '工具声明' },
+          { n: 'tool_loop.py', cmt: '执行循环' },
+          { n: 'time_tool.py / weather_tool.py' },
+          { n: 'web_search_tool.py / web_page_tool.py' },
+        ]},
+        { n: 'toolbox.py', cmt: '材料解析' },
+        { n: 'message_plan', d: 1, cmt: '发送规划', kids: [
+          { n: 'builder.py / splitting.py' },
+          { n: 'schema.py / onebot.py' },
+        ]},
+        { n: 'voice', d: 1, cmt: '语音决策', kids: [
+          { n: 'manager.py / policy.py' },
+          { n: 'segmentation.py / delivery.py' },
+        ]},
+        { n: 'proactive', d: 1, cmt: '主动互动', kids: [
+          { n: 'planner.py / policy.py' },
+          { n: 'greetings.py' },
+        ]},
+        { n: 'stickers.py / sticker_parts', cmt: '表情' },
+        { n: 'config', d: 1, cmt: '配置', kids: [
+          { n: 'schema.py / loader.py' },
+        ]},
+        { n: 'runtime', d: 1, cmt: '路径/状态/日志' },
+        { n: 'application', d: 1, cmt: 'turn 抽象' },
+        { n: 'group_reply_focus.py', cmt: '群聊焦点' },
+        { n: 'iteration / language_guard / lore', cmt: '质检' },
+      ]},
+      { n: 'atri_voice_service', d: 1, kids: [
+        { n: 'server.py / app.py', cmt: 'HTTP' },
+        { n: 'providers.py', cmt: 'SenseVoice/GPT-SoVITS' },
+        { n: 'speech_pipeline.py', cmt: '日常语音' },
+        { n: 'singing*.py', cmt: '歌声任务' },
+        { n: 'quality.py', cmt: '质量门' },
+        { n: 'original_library.py', cmt: '原声素材' },
+      ]},
+      { n: 'atri_webui', d: 1, kids: [
+        { n: 'server.py', cmt: 'HTTP API' },
+        { n: 'page.py', cmt: '单页前端' },
+        { n: '*_admin.py', cmt: '各管理模块' },
+      ]},
+      { n: 'atri_desktop', d: 1, kids: [
+        { n: 'app.py / controller.py' },
+      ]},
+    ]},
+    { n: 'docs/prompts', d: 1, cmt: '17 个提示词', kids: [
+      { n: 'atri_persona.md', cmt: '人格' },
+      { n: 'memory_extraction.md / tool_use.md / ...' },
+    ]},
+    { n: 'data', d: 1, cmt: '运行时数据', kids: [
+      { n: 'memory/', cmt: 'users.json + sqlite' },
+      { n: 'stickers/', cmt: '表情' },
+      { n: 'voice/', cmt: '语音资源' },
+      { n: 'webui/', cmt: '模型档案等' },
+    ]},
+    { n: 'tests/', cmt: '26 文件 · 337 用例' },
+    { n: 'tools/', cmt: '启动/训练/环境脚本' },
+    { n: 'deploy/cloud/', cmt: 'systemd 云端部署' },
+    { n: '.env.example', cmt: '全部配置项模板' },
+    { n: 'pyproject.toml', cmt: '包定义' },
+  ];
+
+  // ===== 目录树渲染 =====
+  function esc(s){ return s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+  function renderTree(nodes, depth){
+    let html = '';
+    for (const node of nodes){
+      const indent = '  '.repeat(depth);
+      if (node.d){
+        html += `<div class="row"><span class="dir">${esc(node.n)}/</span>${node.cmt ? ' <span class="cmt">— ' + esc(node.cmt) + '</span>' : ''}</div>`;
+        html += `<div class="sub">${renderTree(node.kids, depth + 1)}</div>`;
+      } else {
+        html += `<div class="row">${indent}<span class="file">${esc(node.n)}</span>${node.cmt ? ' <span class="cmt">· ' + esc(node.cmt) + '</span>' : ''}</div>`;
+      }
+    }
+    return html;
+  }
+  const treeEl = document.getElementById('repoTree');
+  if (treeEl) treeEl.innerHTML = renderTree(repoTree, 0);
+
+  // 阅读进度条
+  const bar = document.getElementById('progressBar');
+  function onScroll(){
+    const h = document.documentElement;
+    const p = h.scrollTop / (h.scrollHeight - h.clientHeight || 1);
+    bar.style.width = (p * 100) + '%';
+  }
+  document.addEventListener('scroll', onScroll, {passive:true});
+  onScroll();
+
+  // 侧边栏高亮当前章节
+  const navLinks = document.querySelectorAll('.nav-sec a');
+  const sections = Array.from(document.querySelectorAll('section')).map(s => s.id);
+  function onNavScroll(){
+    const y = window.scrollY + 90;
+    let current = '';
+    for (const id of sections){
+      const el = document.getElementById(id);
+      if (el && el.offsetTop <= y) current = id;
+    }
+    navLinks.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + current));
+  }
+  document.addEventListener('scroll', onNavScroll, {passive:true});
+  onNavScroll();
+</script>
+</body>
+</html>

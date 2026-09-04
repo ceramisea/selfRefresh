@@ -1,0 +1,114 @@
+# 亚托莉 QQ 机器人 · 安装与配置指引
+
+> 适用场景：Windows 电脑 · 已装 Python 3.11+ · 本地 Ollama 模型 · 尚未安装 NapCat
+
+---
+
+## 一、安装流程概览（共 4 步）
+
+```
+1. 运行「一键安装.bat」    → 建虚拟环境、装依赖、生成 .env
+2. 编辑 .env 填 QQ 号      → BOT_QQ=你的机器人QQ号
+3. 安装并登录 NapCat       → 让机器人 QQ 在线（见下方第三节）
+4. 运行「启动机器人.bat」  → 启动主服务，然后用另一个 QQ 测试
+```
+
+---
+
+## 二、第 1~2 步：安装项目
+
+1. 在项目文件夹里，**双击运行 `一键安装.bat`**
+   - 它会自动：创建 `.venv` 虚拟环境 → 安装依赖 → 生成 `.env` → 跑环境自检
+   - 如果弹出「已阻止脚本」之类的提示，右键该文件 → 属性 → 勾选「解除锁定」→ 确定，再双击
+
+2. 用记事本打开项目根目录的 `.env`，找到这两行，改成你的机器人 QQ 号：
+
+   ```
+   BOT_QQ=YOUR_BOT_QQ
+   OWNER_QQ=          ← 可选：填你自己的大号 QQ，早安只发给你
+   ```
+
+   （机器人 QQ = 你准备专门用来当机器人的那个小号）
+
+3. 装好 Ollama 并拉取模型（在任意命令行窗口执行）：
+
+   ```powershell
+   ollama pull qwen3:4b-instruct
+   ollama pull qwen3-vl:4b-instruct   # 可选：图片识别用，显存小可跳过
+   ```
+
+4. 验证 Ollama 正常：浏览器打开 `http://127.0.0.1:11434` 能看到 Ollama 提示。
+
+---
+
+## 三、第 3 步：安装 NapCat
+
+NapCat 的作用：帮你登录机器人 QQ，并把 QQ 消息转成 OneBot 协议发给主服务。
+
+### 3.1 下载
+
+1. 打开 NapCat 官网 / GitHub 发布页（搜索 "NapCat QQ" 或访问 `https://napcat.napneko.icu`）
+2. 下载 **Windows 版本**，推荐「一键整合包 / NapCat.Shell」版本
+3. 解压到 `D:\Tools\NapCat\OneKey\`（尽量不用中文/空格路径，可避免坑）
+
+### 3.2 首次启动与登录
+
+1. 双击解压目录里的启动脚本（一般是 `启动.bat` 或 `NapCat.Shell` 入口）
+2. 会弹出一个 **QQ 登录窗口**，用你的机器人 QQ 扫码登录
+3. 登录成功后，NapCat 会在后台保持运行，并启动它自己的 WebUI
+
+### 3.3 找到 NapCat WebUI
+
+默认地址：`http://127.0.0.1:6099/webui`
+
+- 登录 token 在 NapCat 安装目录下的 `config/webui.json` 里
+- 打开时会让你填 token，从那个文件复制即可
+
+### 3.4 配置反向 WebSocket（关键一步）
+
+在 NapCat WebUI 里：
+
+1. 进入「网络配置」/「Network」页
+2. 添加一个 **WebSocket 客户端**（反向 WebSocket / WebSocket Client）
+3. 填写：
+
+   | 字段 | 值 |
+   |---|---|
+   | 名称 | atri-qq-bot（随便起） |
+   | 地址 / URL | `ws://127.0.0.1:8765/onebot` |
+   | 消息格式 | array |
+   | 重连间隔 | 5000 |
+
+4. 保存并启用
+
+> 也可以直接用项目里自带的 `napcat-onebot11-config.json` 覆盖 NapCat 的对应配置文件，再重启 NapCat。
+
+---
+
+## 四、第 4 步：启动与测试
+
+1. 双击运行 **`启动机器人.bat`**（会保持前台窗口）
+2. 看到日志出现类似 `OneBot 服务已启动` 且 NapCat 连接成功后：
+   - 用你的大号 QQ 给机器人 QQ **发一条私聊消息**
+   - 应该能收到亚托莉风格回复
+3. 管理面板：浏览器打开 `http://127.0.0.1:8787`
+
+---
+
+## 五、常见问题
+
+| 现象 | 处理 |
+|---|---|
+| 启动报「缺少依赖」 | 重新运行 `一键安装.bat` |
+| 机器人没反应 | ① NapCat 是否在线？② WebSocket 地址是否 `ws://127.0.0.1:8765/onebot`？③ 先启动机器人再开 NapCat |
+| 回复是乱码/很笨 | 检查 `OPENAI_MODEL` 是否 `qwen3:4b-instruct` 且 Ollama 已拉取该模型 |
+| 发图片没分析 | `TOOLBOX_VISION_ENABLED=true` 需要视觉模型，显存不足可改 `false` |
+| 想彻底关闭 | 关掉机器人窗口 + 关闭 NapCat 即可 |
+
+---
+
+## 六、想让它更聪明？
+
+- 换更大的本地模型（如 `qwen3:8b` / `qwen3:14b`，需更大内存/显存）
+- 或填云端 API（`OPENAI_BASE_URL` / `OPENAI_API_KEY` 改成一家的 OpenAI 兼容服务）
+- 语音 / 歌声功能默认关闭，需要时可到 WebUI 或 `.env` 打开，但需要额外装 GPT-SoVITS 运行时（较复杂）

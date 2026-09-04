@@ -1,0 +1,350 @@
+# 亚托莉 QQ 陪伴机器人 — Atri QQ Bot
+
+<p align="center">
+  <strong>基于 OneBot/NapCat 协议的 AI 陪伴机器人</strong><br>
+  RAG 记忆检索 · Function Calling · 联网搜索 · 语音/歌声 · 工具箱 · 桌宠 · Web 管理面板
+</p>
+
+---
+
+## 版本
+
+| 分支 | 版本 | 说明 |
+|------|------|------|
+| `main` / `v0.3` | **v0.3** (当前) | ✅ 默认分支，内容与 `v0.3` 同步，始终为最新版本 |
+| `v0.2` | **v0.2** | 重构为包结构 + LLM Function Calling 工具系统 |
+| `v0.1-original` | **v0.1** | 原始扁平文件版本，仅作存档 |
+
+### v0.3 相比 v0.2 新增功能
+
+- **RAG 记忆检索** — 分层记忆 + 语义召回：
+  - `memory_parts/core.py` — L1/L2/L3 分层记忆（强化确认、活跃度衰减、沉睡）
+  - `retrieval/` — SQLite FTS5 索引（默认）+ 可选 bge-m3 向量化，`recall_context` 检索注入
+  - 后台异步提取，WebUI 可编辑带回写优先级
+- **LLM Agent 工具系统** — `llm_tools/`：
+  - Function Calling：`get_current_time`、`search_web`（Bing/Google News/arXiv/GitHub + 首条原文 grounding）
+  - Agent 协议 (`agent_protocol.py`)：多步工具协商，`web_page_tool` 自动读网页正文
+- **语音模块** — 完整 TTS/ASR 管线：
+  - `atri_voice_service/` — 独立 HTTP 语音合成服务（GPT-SoVITS / Edge-TTS 双引擎）
+  - `atri_qq_bot/voice/` — QQ 端语音决策与发送（6 层决策链）
+  - SenseVoice ASR 语音识别，支持热词优化和口音矫正
+  - 质量门控：MOS 评分 + 时长校验，低质量自动降级为文字
+  - 流式语音回复（SSML），支持说话中被打断
+  - 语音训练脚本：GPT-SoVITS v2Pro LoRA 微调管线
+- **歌声合成** — `atri_voice_service/singing*` + `tools/voice/`：人声分离、乐理分段、工程混音、质量门、全流程脚本
+- **工具箱 (Toolbox)** — 文档/表格/网页/图片/视频材料解析：PDF 抽取、OCR、本地视觉模型识图、视频关键帧分析、表格概览
+- **主动规划 v2** — 分层活动检测与多策略空闲关怀，群聊冷场插话
+- **WebUI 增强** — 配置、记忆、表情、语音/歌声、模型档案、Minecraft 桥接管理面板
+- **架构加固** — 迭代自纠错、OneBot v11 完整实现、桌面宠物启动链（`.venv pythonw` 无终端接管）
+- **安全清理** — 所有硬编码 QQ 号和本地路径已替换为占位符/环境变量，适合开源发布
+
+---
+
+## 小白启动方式
+
+最简单：
+
+1. 像平时一样启动 QQ：`C:\Program Files\Tencent\QQNT\QQ.exe`
+2. 后台监听器会在 1 秒内接管启动，拉起可见的 NapCat QQ，同时后台启动 Ollama 和亚托莉服务
+3. 如果 QQ 要扫码登录，请扫码一次
+4. 用另一个 QQ 给你的机器人 QQ 发私聊消息测试
+
+停止机器人：
+
+- 平时不用手动停止，关闭 QQ 即可。
+- 如果需要彻底停止，可以运行项目根目录里的 `停止亚托莉.bat`。
+
+NapCat 的 OneBot 反向 WebSocket 已经自动配置为：`ws://127.0.0.1:8765/onebot`。不要双击 `run.ps1`，Windows 很容易把它当文本文件打开。
+
+这是一个最小可运行的 NapCat / OneBot v11 反向 WebSocket 机器人，用配置的机器人 QQ 接收消息并按"亚托莉"人设回复。
+
+## 当前完成内容
+
+- 监听 NapCat 反向 WebSocket 事件。
+- 默认绑定机器人 QQ：`.env` 中 `BOT_QQ` 配置。
+- 私聊自动回复；群聊默认仅在 @机器人、提到"亚托莉"或"atri"时回复。
+- 支持 OpenAI 兼容接口；没有 API Key 时使用本地人设兜底回复。
+- 私聊、群整体、群内用户分别保留聊天记录和对话特征，便于连续聊天和独立适配。
+- 群聊会读取群上下文；被 @ 或提到"亚托莉/atri"时按上下文回复。
+- 支持群聊低频冷场主动发言，默认冷场 90 分钟后才轻量插一句，单日单群最多 3 次。
+- 回复会自动拆成多条短句发送，模拟流式输出，避免长段刷屏。
+- 会记录用户聊天习惯，自动调整回复长短、节奏和表情频率。
+- 记忆分层沉淀：重要信息强化确认后进入长期记忆，长期无互动的记忆自动降权沉睡；支持语义检索召回历史相关记忆。
+- 支持自迭代纠错：用户指出错误时会自主判断，合理就认错改正，笼统就认一半并重答，越界或破坏人设的要求会傲娇拒绝。
+- 支持本地表情包：按情绪匹配图片，也支持自定义触发词。
+- 支持自动归档聊天记录里的图片/表情包，并从本地表情库主动发送。
+- 支持手机端直接发送的文档、表格、PDF、图片和视频材料：文档会抽取正文，表格会汇总字段/样例/数值概览，图片会调用本机视觉模型做基础识图和审美评价，视频会在能取得文件时抽取关键帧分析。
+- 支持空闲轻量主动关心，默认 3 小时空闲后最多半天提醒一次。
+- 支持每天早上 7:30 主动发送元气早安，带防重复和补发窗口。
+- 内置亚托莉原作设定摘要和梗库，回复前会做人设校验。
+- 已接入桌面原 QQ 图标联动启动：点击原有 `QQ.lnk` 后，后台监听器会接管并恢复 QQ 界面，亚托莉和模型服务在后台启动，不新增桌面图标，不弹终端窗口。
+- 🔧 **LLM Agent 工具系统**：模型可自主调用时间查询、联网搜索（自动读原文）、网页正文抓取，不需要时不产生任何 token 开销。
+- 🧠 **语音与歌声**：可选语音回复（TTS/ASR）、歌声合成（人声分离 + 工程混音），由独立语音服务承载。
+
+## 安装
+
+```powershell
+cd "D:\AI-Atri"  # 替换为你的实际路径
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e .
+Copy-Item .env.example .env
+```
+
+如需接入大模型，编辑 `.env`：
+
+```env
+OPENAI_API_KEY=你的_API_Key
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_MODEL=gpt-4.1-mini
+```
+
+不填 `OPENAI_API_KEY` 也能运行，只是会使用本地规则回复。
+
+## 启动机器人服务
+
+```powershell
+cd "D:\AI-Atri"  # 替换为你的实际路径
+.\.venv\Scripts\Activate.ps1
+python -m atri_qq_bot
+```
+
+启动后会监听：
+
+```text
+ws://127.0.0.1:8765/onebot
+```
+
+## NapCat 配置
+
+在 NapCat 中登录你的机器人 QQ，添加一个 OneBot v11 反向 WebSocket 连接：
+
+- 类型：反向 WebSocket / WebSocket Client
+- 地址：`ws://127.0.0.1:8765/onebot`
+- OneBot 版本：v11
+
+然后用另一个 QQ 给机器人 QQ 发私聊消息，应该能收到亚托莉风格回复。
+
+## Windows 双端部署（Docker 聊天 + 宿主机语音）
+
+Windows 上推荐的结构：**聊天运行在 Docker**（NapCat + 亚托莉），**语音合成运行在宿主机**（GPT-SoVITS + `atri_voice_service`），两端通过 `host.docker.internal` 互通。
+
+```text
+QQ ⇄ NapCat(:6099) ⇄ atri-qq-bot(:8765)
+                        ↓
+      host.docker.internal:8790 (atri_voice_service)
+                        ↓
+              :9880 (GPT-SoVITS api_v2)
+```
+
+### 前置环境
+
+- Windows + Docker Desktop（需支持 `host.docker.internal` 与目录挂载）。
+- Python 3.11（完整安装，含 pip / venv）。
+- NVIDIA 显卡驱动；PyTorch 需与显卡型号匹配（RTX 50 系用 cu128，不要用旧的 cu124）。
+- 配好项目根 `.env`（`BOT_QQ` / `OWNER_QQ` / 模型 API）。
+
+### 宿主机一次性准备（模型与语音运行时）
+
+1. 下载 GPT-SoVITS 预训练模型与 ATRI 候选音色，放到 `data\models\AI_ATRI\voice\`（`base` + `candidates`）。
+2. 建立 ASCII 联接以规避中文路径问题：
+
+   ```powershell
+   New-Item -ItemType Junction -Path D:\AtriModels -Target "D:\本地大模型\models\AI_ATRI"
+   ```
+
+   > 脚本默认读取 `D:\本地大模型\models\AI_ATRI`，可用环境变量 `LOCAL_MODELS_ROOT` 覆盖。
+
+3. 安装 GPT-SoVITS 源码与虚拟环境到 `data\runtime\gpt-sovits\`（`tools/voice/download_gpt_sovits_source.py` + `tools/voice/install_gpt_sovits_runtime.py`）。
+4. 安装语音运行时（FunASR / SenseVoice + `atri_voice_service`）：
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File tools\voice\setup-voice-runtime.ps1
+   ```
+
+### 日常启动顺序
+
+先启动宿主机语音，再启动 Docker 聊天：
+
+```powershell
+# 语音引擎
+powershell -ExecutionPolicy Bypass -File tools\voice\start-gpt-sovits.ps1    # → :9880
+powershell -ExecutionPolicy Bypass -File tools\voice\start-voice-service.ps1 # → :8790
+
+# QQ 机器人（聊天）
+cd deploy\docker
+docker compose up -d --build
+```
+
+`.env` 关键语音项：
+
+```env
+VOICE_ASR_ENABLED=true
+VOICE_TTS_ENABLED=true
+VOICE_SERVICE_URL=http://host.docker.internal:8790
+VOICE_PROFILE=atri-official-v2pro-curated        # 按你的候选音色档案填写
+VOICE_ZH_RESCUE_PROFILE=atri-official-v2pro-curated-gpt-e6
+```
+
+### NapCat 登录与接线
+
+1. 打开 NapCat WebUI（token 见 `docker logs napcat`）。
+2. 机器人 QQ 扫码登录。
+3. 反向 WebSocket 指向容器内地址：`ws://atri:8765/onebot`（同一 compose 网络内使用服务名）。
+4. 确认亚托莉已连接；管理面板：`http://127.0.0.1:8787`。
+
+### 验收
+
+- GPT-SoVITS：`http://127.0.0.1:9880` 可访问。
+- 语音服务：`http://127.0.0.1:8790/health` 返回 `{"ok": true, "ready": true}`。
+- WebUI「测试」页：ASR / TTS 试听通过。
+- QQ 私聊发「用语音回复我」应收到语音；合成失败会自动降级为文字，不影响主聊天。
+
+### 停止
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\voice\stop-gpt-sovits.ps1
+powershell -ExecutionPolicy Bypass -File tools\voice\stop-voice-service.ps1
+cd deploy\docker; docker compose down
+```
+
+### 常见踩坑（已实测处理）
+
+| 问题 | 处理 |
+|------|------|
+| Docker 读不到宿主机合成文件 | 挂载 `E:\...\data\... → /app/data/...`，NapCat 侧用 `base64://` 发送 |
+| 全量 `docker build` 太慢 | 项目根加 `.dockerignore`，排除 `models` / `runtime` / `cache` |
+| 改代码不想等重建 | `docker cp` 进容器后 `docker restart atri-qq-bot` |
+| torchcodec / 音频加载失败 | 语音兼容层回退 `soundfile` |
+
+日常重启只需：GPT-SoVITS → voice service → `docker compose up -d`。
+
+## 配置项
+
+`.env` 中常用配置：
+
+```env
+BOT_QQ=YOUR_BOT_QQ
+HOST=127.0.0.1
+PORT=8765
+REPLY_MODE=mention
+MESSAGE_SPLIT_MAX_CHARS=44
+MESSAGE_SPLIT_MAX_PARTS=4
+STICKER_CHANCE=0.24
+IDLE_PROACTIVE_ENABLED=true
+IDLE_MINUTES=180
+IDLE_COOLDOWN_MINUTES=720
+OWNER_QQ=
+GROUP_CONTEXT_ENABLED=true
+GROUP_PROACTIVE_ENABLED=true
+GROUP_PROACTIVE_IDLE_MINUTES=90
+GROUP_PROACTIVE_COOLDOWN_MINUTES=240
+GROUP_PROACTIVE_DAILY_LIMIT=3
+MORNING_GREETING_ENABLED=true
+MORNING_GREETING_TIME=07:30
+MORNING_GREETING_TIMEZONE=Asia/Shanghai
+TOOLBOX_ENABLED=true
+TOOLBOX_VISION_ENABLED=true
+TOOLBOX_VISION_MODEL=qwen2.5vl:3b
+TOOLBOX_VIDEO_FRAME_ANALYSIS_ENABLED=true
+TOOLBOX_VIDEO_MAX_FRAMES=4
+```
+
+### v0.2 新增配置项
+
+```env
+# LLM 工具系统：模型可自主调用时间/搜索
+LLM_TOOLS_ENABLED=true
+LLM_TOOL_MAX_CALLS=2
+WEB_SEARCH_ENABLED=true
+WEB_SEARCH_TIMEOUT_SECONDS=6
+WEB_SEARCH_MAX_RESULTS=5
+```
+
+`REPLY_MODE` 可选：
+
+- `private`：只回复私聊。
+- `mention`：回复私聊；群聊只在 @机器人或提到"亚托莉/atri"时回复。
+- `all`：私聊和群聊所有消息都回复，不建议直接用于大群。
+
+## 电脑关机也能聊
+
+电脑关机后，本机程序不能继续运行。要做到电脑不开机也能和亚托莉聊天，需要把项目部署到一台 24 小时在线的设备上，并让 NapCat/QQ 也在那台设备上保持登录。
+
+云端部署说明在：
+
+```text
+deploy/cloud/README.md
+```
+
+核心要求：
+
+- 云服务器/NAS/软路由/旧电脑保持在线。
+- NapCat 的 OneBot v11 反向 WebSocket 仍然连接 `ws://127.0.0.1:8765/onebot`。
+- 模型接口也必须云端可用；如果仍然用本机 Ollama，电脑关机后模型会不可用。
+
+## 每天 7:30 早安
+
+默认已经开启。为了只发给你，建议在 `.env` 里填：
+
+```env
+OWNER_QQ=你的QQ号
+```
+
+如果不填，亚托莉会发给已经和她私聊过的人。每天只发一次，服务 7:30 附近重启也不会重复刷屏。
+
+## 表情包
+
+把图片放进：
+
+```text
+<项目根目录>\data\stickers
+```
+
+推荐按情绪放到这些文件夹：
+
+```text
+happy / comfort / tired / proud / confused / shy / food / goodnight / default
+```
+
+自动保存聊天记录表情包：
+
+```text
+<项目根目录>\data\stickers\_chat_history
+```
+
+默认联网表情缓存：
+
+```text
+<项目根目录>\data\stickers\_online_default
+```
+
+发送优先级：
+
+```text
+手动添加的本地表情 > 聊天记录归档表情 > 默认联网缓存表情 > 网页 URL > QQ 自带表情 + emoji
+```
+
+自定义触发词编辑：
+
+```text
+<项目根目录>\data\stickers\triggers.json
+```
+
+例如 `"高性能": "proud"` 表示用户说到"高性能"时，优先从 `proud` 文件夹发一张表情包。
+
+## 测试
+
+```powershell
+cd "C:\Path\To\AI_ATRI"  # 替换为你的实际路径
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[dev]"
+python -m pytest
+```
+
+## 开发者支持
+
+完整的服务关系、端口、NapCat WebUI、日志、依赖与故障排查见 [DEVELOPER.md](DEVELOPER.md)。
+
+主运行环境由 [requirements.txt](requirements.txt) 锁定：`httpx` 用于模型/API 请求，`websockets` 用于 OneBot 反向连接，`python-dotenv` 读取配置，`Pillow`/`rapidocr`/`onnxruntime` 处理图像与 OCR，`pypdf` 解析 PDF，`imageio-ffmpeg` 抽取视频帧；`pytest` 仅用于开发回归测试。语音与歌唱使用隔离运行时，不应混装进主 `.venv`。
+
